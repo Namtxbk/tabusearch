@@ -519,18 +519,20 @@ class TabuSearchConfig:
 
 
 def tabu_search(inst: Instance,
-                cfg: TabuSearchConfig = None) -> Tuple[Solution, List[float]]:
+                cfg: TabuSearchConfig = None,
+                init_solution: Solution = None) -> Tuple[Solution, List[float]]:
     """
-    Tabu Search chính.
-
-    Trả về (best_solution, history) trong đó history là list makespan theo iter.
+    Tabu Search chinh. Nhan init_solution tu Solomon I1 hoac tu greedy.
     """
     if cfg is None:
         cfg = TabuSearchConfig()
 
-    # ── Khởi tạo ─────────────────────────────────────────────────────────
-    sol = greedy_construction(inst, alpha=cfg.alpha,
-                              beta=cfg.beta, gamma=cfg.gamma)
+    # Khoi tao
+    if init_solution is not None:
+        sol = init_solution.copy()
+    else:
+        sol = greedy_construction(inst, alpha=cfg.alpha,
+                                  beta=cfg.beta, gamma=cfg.gamma)
     sol.lambda_tw  = cfg.lambda_tw
     sol.lambda_cap = cfg.lambda_cap
 

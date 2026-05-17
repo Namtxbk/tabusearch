@@ -1,0 +1,16 @@
+bài toán TSP : 
+- 
+Bài toán VRP : 
+- 
+
+Lời giải ban đầu 
+- xây dung lời giai ban dau du tot 
+- chuan bi so do thuat toan 
+- bieu dien loi gia
+- thuat toan tham lam 
+- 
++ các nb cua mình sẽ là nb nào ? 
+- bieu dien loi giai 
+bài 1 : xử lý time windown 
+- lưu them thong tin bo tro 
+- kiem tra rang buoc cac anh huong do toi rb thời gian 
