@@ -153,6 +153,12 @@ def check_insert(route: Route, node_id: int, pos: int,
     is_drone = route.is_drone
     cdata    = {c.id: c for c in inst.all_nodes}
 
+    # Guard: pos phải hợp lệ và route.a phải được khởi tạo
+    if pos < 0 or pos >= len(seq) - 1:
+        return False, 0.0
+    if not route.a or len(route.a) != len(seq):
+        return False, 0.0
+
     i_node   = seq[pos]
     j_node   = seq[pos + 1]
     node     = cdata[node_id]
