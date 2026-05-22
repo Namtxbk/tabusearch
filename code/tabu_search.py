@@ -480,11 +480,11 @@ class TabuSearchConfig:
     max_neighbors:     int   = 300
     lambda_tw:         float = 50.0
     lambda_cap:        float = 200.0
-    alpha:             float = 0.5    # greedy: trọng số dist
-    beta:              float = 0.3    # greedy: trọng số wait
-    gamma:             float = 0.2    # greedy: trọng số urgency
+    alpha:             float = 0.5    
+    beta:              float = 0.3    
+    gamma:             float = 0.2    
     verbose:           bool  = True
-    time_limit:        float = 300.0  # giây
+    time_limit:        float = 300.0  
 
 
 def tabu_search(inst: Instance,
