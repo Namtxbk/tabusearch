@@ -1,17 +1,4 @@
-"""
-tabu_search.py — Thuật toán Tabu Search cho MVRPD-TW
 
-Move operators:
-  1. Relocate    — di chuyển 1 khách giữa 2 route cùng loại
-  2. TwoOpt      — đảo đoạn nội tuyến trong 1 route
-  3. OrOpt       — dịch chuỗi 1-3 khách sang vị trí khác
-  4. TwoOptStar  — swap tail 2 truck routes
-  5. Transfer    — chuyển C2 giữa truck route và drone route
-
-Tabu List lưu (move_type, attribute) với tenure thích nghi.
-Aspiration: chấp nhận tabu move nếu F(S') < F(S_best).
-Diversification: sau MAX_NO_IMPROVE iter, xáo trộn và tiếp tục.
-"""
 
 from __future__ import annotations
 import random
@@ -20,578 +7,192 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional, Set
 
-from instance import Instance
-from solution import (Route, Solution, precompute,
-                      check_insert, check_remove, check_2opt_star)
-from construction import greedy_construction, is_drone_eligible as _elig
+from instance import Instance, Customer
+from solution import Route, Solution, precompute
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Tabu List
-# ─────────────────────────────────────────────────────────────────────────────
 
 @dataclass
-class TabuMove:
-    move_type: str          # 'relocate', '2opt', 'oropt', '2optstar', 'transfer'
-    attribute: tuple        # (customer_id, from_route_idx, to_route_idx) hoặc tương tự
-    expire_iter: int
+class TabuConfig:
+    max_iterations: int = 200
+    tabu_tenure: int = 15
+    diversify_thresh: int = 30
+    verbose: bool = True
 
 
 class TabuList:
-    def __init__(self, tenure_base: int = 10, tenure_delta: int = 3):
-        self.moves: List[TabuMove] = []
-        self.tenure_base  = tenure_base
-        self.tenure_delta = tenure_delta
+    def __init__(self):
+        self.matrix: Dict[Tuple[str, int, int], int] = {}
 
-    def add(self, move_type: str, attribute: tuple, current_iter: int):
-        tenure = (self.tenure_base
-                  + random.randint(-self.tenure_delta, self.tenure_delta))
-        self.moves.append(TabuMove(move_type, attribute,
-                                   current_iter + tenure))
+    def add(self, move_type: str, node_id: int, target_route: int, current_iter: int, tenure: int):
+        self.matrix[(move_type, node_id, target_route)] = current_iter + tenure
 
-    def is_tabu(self, move_type: str, attribute: tuple,
-                current_iter: int) -> bool:
-        for m in self.moves:
-            if m.expire_iter > current_iter:
-                if m.move_type == move_type and m.attribute == attribute:
-                    return True
-        return False
-
-    def cleanup(self, current_iter: int):
-        self.moves = [m for m in self.moves if m.expire_iter > current_iter]
-
-    def increase_tenure(self, factor: float = 1.2, max_tenure: int = 30):
-        self.tenure_base = min(int(self.tenure_base * factor), max_tenure)
+    def is_tabu(self, move_type: str, node_id: int, target_route: int, current_iter: int) -> bool:
+        return self.matrix.get((move_type, node_id, target_route), 0) > current_iter
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Move generators
-# ─────────────────────────────────────────────────────────────────────────────
-
-MoveResult = Tuple[float, str, tuple, 'Solution']
-# (delta_obj, move_type, attribute, new_solution)
-
-
-def _apply_relocate(sol: Solution, inst: Instance,
-                    src_type: str, src_idx: int, src_pos: int,
-                    dst_type: str, dst_idx: int, dst_pos: int) -> Optional[MoveResult]:
-    """Di chuyển khách tại src_pos sang dst_pos."""
-    src_routes = sol.truck_routes if src_type == 'T' else sol.drone_routes
-    dst_routes = sol.truck_routes if dst_type == 'T' else sol.drone_routes
-
-    src_r = src_routes[src_idx]
-    dst_r = dst_routes[dst_idx]
-
-    if len(src_r.sequence) < 3:   # route rỗng
-        return None
-    if src_pos < 1 or src_pos >= len(src_r.sequence) - 1:
-        return None
-
-    node_id = src_r.sequence[src_pos]
-
-    # Không chuyển C1 sang drone
-    cdata = {c.id: c for c in inst.customers}
-    if dst_type == 'D' and node_id in inst.c1_ids:
-        return None
-    if dst_type == 'D' and not _elig(cdata[node_id], inst):
-        return None
-
-    # Kiểm tra xóa khỏi src
-    feasible_remove, _ = check_remove(src_r, src_pos, inst)
-    if not feasible_remove:
-        return None
-
-    # Kiểm tra chèn vào dst tại dst_pos
-    if dst_pos < 0 or dst_pos > len(dst_r.sequence) - 2:
-        return None
-    feasible_insert, _ = check_insert(dst_r, node_id, dst_pos, inst)
-    if not feasible_insert:
-        return None
-
-    # Tạo nghiệm mới
-    new_sol = sol.copy()
-    new_src = (new_sol.truck_routes if src_type == 'T'
-               else new_sol.drone_routes)[src_idx]
-    new_dst = (new_sol.truck_routes if dst_type == 'T'
-               else new_sol.drone_routes)[dst_idx]
-
-    new_src.sequence.pop(src_pos)
-    new_dst.sequence.insert(dst_pos + 1, node_id)
-
-    precompute(new_src, inst)
-    precompute(new_dst, inst)
-
-    delta = new_sol.objective(inst) - sol.objective(inst)
-    attr  = (node_id, f'{src_type}{src_idx}', f'{dst_type}{dst_idx}')
-    return delta, 'relocate', attr, new_sol
-
-
-def _apply_2opt(sol: Solution, inst: Instance,
-                vtype: str, ridx: int, i: int, j: int) -> Optional[MoveResult]:
-    """Đảo đoạn [i+1..j] trong route."""
-    routes = sol.truck_routes if vtype == 'T' else sol.drone_routes
-    r = routes[ridx]
-    seq = r.sequence
-
-    if i < 0 or j >= len(seq) - 1 or i >= j - 1:
-        return None
-
-    new_sol = sol.copy()
-    new_r   = (new_sol.truck_routes if vtype == 'T'
-               else new_sol.drone_routes)[ridx]
-
-    # Đảo đoạn [i+1..j]
-    new_r.sequence[i+1:j+1] = new_r.sequence[i+1:j+1][::-1]
-    precompute(new_r, inst)
-
-    # Kiểm tra TW toàn route sau đảo
-    cdata = {c.id: c for c in inst.all_nodes}
-    for pos, nid in enumerate(new_r.sequence):
-        if new_r.a[pos] > cdata[nid].due + 1e-6:
-            return None
-
-    delta = new_sol.objective(inst) - sol.objective(inst)
-    attr  = (f'{vtype}{ridx}', seq[i+1], seq[j])
-    return delta, '2opt', attr, new_sol
-
-
-def _apply_oropt(sol: Solution, inst: Instance,
-                 vtype: str, ridx: int,
-                 seg_start: int, seg_len: int,
-                 insert_pos: int) -> Optional[MoveResult]:
-    """Dịch chuỗi seg_len khách từ seg_start sang insert_pos."""
-    routes = sol.truck_routes if vtype == 'T' else sol.drone_routes
-    r = routes[ridx]
-    seq = r.sequence
-
-    seg_end = seg_start + seg_len - 1
-    if seg_start < 1 or seg_end >= len(seq) - 1:
-        return None
-    if insert_pos < 0 or insert_pos >= len(seq) - 1:
-        return None
-    if seg_start <= insert_pos <= seg_end:
-        return None   # chèn vào chính đoạn mình
-
-    new_sol = sol.copy()
-    new_r   = (new_sol.truck_routes if vtype == 'T'
-               else new_sol.drone_routes)[ridx]
-
-    segment = new_r.sequence[seg_start:seg_end + 1]
-    del new_r.sequence[seg_start:seg_end + 1]
-
-    # Tính lại insert_pos sau khi xóa
-    actual_pos = insert_pos if insert_pos < seg_start else insert_pos - seg_len
-    actual_pos = max(0, min(actual_pos, len(new_r.sequence) - 1))
-    for k, nid in enumerate(segment):
-        new_r.sequence.insert(actual_pos + 1 + k, nid)
-
-    precompute(new_r, inst)
-
-    # Kiểm tra TW
-    cdata = {c.id: c for c in inst.all_nodes}
-    for pos, nid in enumerate(new_r.sequence):
-        if new_r.a[pos] > cdata[nid].due + 1e-6:
-            return None
-
-    delta = new_sol.objective(inst) - sol.objective(inst)
-    attr  = (f'{vtype}{ridx}', seq[seg_start], seq[seg_end])
-    return delta, 'oropt', attr, new_sol
-
-
-def _apply_2opt_star(sol: Solution, inst: Instance,
-                     r1_idx: int, i: int,
-                     r2_idx: int, j: int) -> Optional[MoveResult]:
-    """Swap tail của truck_routes[r1_idx] và truck_routes[r2_idx]."""
-    if r1_idx == r2_idx:
-        return None
-    r1 = sol.truck_routes[r1_idx]
-    r2 = sol.truck_routes[r2_idx]
-
-    if i < 0 or i >= len(r1.sequence) - 1:
-        return None
-    if j < 0 or j >= len(r2.sequence) - 1:
-        return None
-
-    feasible, delta_c = check_2opt_star(r1, i, r2, j, inst,
-                                         inst.truck_capacity)
-    if not feasible:
-        return None
-
-    new_sol = sol.copy()
-    nr1 = new_sol.truck_routes[r1_idx]
-    nr2 = new_sol.truck_routes[r2_idx]
-
-    tail1 = nr1.sequence[i + 1:]
-    tail2 = nr2.sequence[j + 1:]
-    nr1.sequence = nr1.sequence[:i + 1] + tail2
-    nr2.sequence = nr2.sequence[:j + 1] + tail1
-
-    precompute(nr1, inst)
-    precompute(nr2, inst)
-
-    delta = new_sol.objective(inst) - sol.objective(inst)
-    attr  = (r1.sequence[i], r1_idx, r2.sequence[j], r2_idx)
-    return delta, '2optstar', attr, new_sol
-
-
-def _apply_transfer(sol: Solution, inst: Instance,
-                    src_type: str, src_ridx: int, src_pos: int,
-                    dst_type: str, dst_ridx: int) -> Optional[MoveResult]:
-    """Chuyển C2 giữa truck route và drone route."""
-    src_routes = sol.truck_routes if src_type == 'T' else sol.drone_routes
-    dst_routes = sol.truck_routes if dst_type == 'T' else sol.drone_routes
-
-    src_r = src_routes[src_ridx]
-    if src_pos < 1 or src_pos >= len(src_r.sequence) - 1:
-        return None
-
-    node_id = src_r.sequence[src_pos]
-
-    # Chỉ C2 mới chuyển được
-    if node_id in inst.c1_ids:
-        return None
-
-    cdata = {c.id: c for c in inst.customers}
-    node_cust = cdata.get(node_id)
-    if node_cust is None:
-        return None
-
-    # Nếu chuyển sang drone: kiểm tra điều kiện drone
-    if dst_type == 'D' and not _elig(node_cust, inst):
-        return None
-
-    dst_r = dst_routes[dst_ridx]
-
-    # Tìm vị trí chèn tốt nhất trong dst route
-    best_pos   = None
-    best_delta = float('inf')
-
-    for p in range(len(dst_r.sequence) - 1):
-        ok, _ = check_insert(dst_r, node_id, p, inst)
-        if ok:
-            # Kiểm tra drone range nếu cần
-            if dst_type == 'D':
-                # Ước tính quãng đường thêm
-                extra = (inst.dist(dst_r.sequence[p], node_id)
-                         + inst.dist(node_id, dst_r.sequence[p + 1])
-                         - inst.dist(dst_r.sequence[p], dst_r.sequence[p + 1]))
-                if dst_r.total_dist + extra > inst.drone_range:
-                    continue
-            best_pos = p
-            break   # lấy vị trí đầu tiên khả thi (greedy)
-
-    if best_pos is None:
-        return None
-
-    # Kiểm tra xóa khỏi src
-    feasible_remove, _ = check_remove(src_r, src_pos, inst)
-    if not feasible_remove:
-        return None
-
-    new_sol = sol.copy()
-    new_src = (new_sol.truck_routes if src_type == 'T'
-               else new_sol.drone_routes)[src_ridx]
-    new_dst = (new_sol.truck_routes if dst_type == 'T'
-               else new_sol.drone_routes)[dst_ridx]
-
-    new_src.sequence.pop(src_pos)
-    new_dst.sequence.insert(best_pos + 1, node_id)
-
-    precompute(new_src, inst)
-    precompute(new_dst, inst)
-
-    delta = new_sol.objective(inst) - sol.objective(inst)
-    attr  = (node_id, f'{src_type}{src_ridx}', f'{dst_type}{dst_ridx}')
-    return delta, 'transfer', attr, new_sol
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Sinh toàn bộ lân cận
-# ─────────────────────────────────────────────────────────────────────────────
-
-def generate_neighborhood(sol: Solution, inst: Instance,
-                           max_neighbors: int = 300) -> List[MoveResult]:
+def _evaluate_penalty_obj(sol: Solution, inst: Instance, penalty_factor: float) -> float:
     """
-    Sinh tập lân cận N(S) bằng cách áp dụng 5 loại move.
-    Giới hạn max_neighbors để kiểm soát thời gian mỗi iteration.
+    Hàm mục tiêu tổng hợp tính toán Makespan cộng với 
+    điểm phạt nặng cho các Tuyến ảo vượt quá giới hạn cấu hình (K và D).
     """
-    neighbors: List[MoveResult] = []
-
-    K = len(sol.truck_routes)
-    D = len(sol.drone_routes)
-
-    all_truck = list(range(K))
-    all_drone = list(range(D))
-
-    # ── Move 1: Relocate (truck↔truck, drone↔drone) ──────────────────────
-    for ridx in all_truck:
-        r = sol.truck_routes[ridx]
-        for src_pos in range(1, len(r.sequence) - 1):
-            for dst_ridx in all_truck:
-                dst_r = sol.truck_routes[dst_ridx]
-                for dst_pos in range(len(dst_r.sequence) - 1):
-                    if ridx == dst_ridx and src_pos == dst_pos:
-                        continue
-                    res = _apply_relocate(sol, inst,
-                                          'T', ridx, src_pos,
-                                          'T', dst_ridx, dst_pos)
-                    if res:
-                        neighbors.append(res)
-                        if len(neighbors) >= max_neighbors:
-                            return neighbors
-
-    for ridx in all_drone:
-        r = sol.drone_routes[ridx]
-        for src_pos in range(1, len(r.sequence) - 1):
-            for dst_ridx in all_drone:
-                dst_r = sol.drone_routes[dst_ridx]
-                for dst_pos in range(len(dst_r.sequence) - 1):
-                    if ridx == dst_ridx and src_pos == dst_pos:
-                        continue
-                    res = _apply_relocate(sol, inst,
-                                          'D', ridx, src_pos,
-                                          'D', dst_ridx, dst_pos)
-                    if res:
-                        neighbors.append(res)
-                        if len(neighbors) >= max_neighbors:
-                            return neighbors
-
-    # ── Move 2: 2-opt nội tuyến ──────────────────────────────────────────
-    for vtype, routes in [('T', sol.truck_routes), ('D', sol.drone_routes)]:
-        for ridx, r in enumerate(routes):
-            n = len(r.sequence)
-            for i in range(1, n - 2):
-                for j in range(i + 1, n - 1):
-                    res = _apply_2opt(sol, inst, vtype, ridx, i, j)
-                    if res:
-                        neighbors.append(res)
-                        if len(neighbors) >= max_neighbors:
-                            return neighbors
-
-    # ── Move 3: Or-opt (seg_len 1,2,3) ───────────────────────────────────
-    for vtype, routes in [('T', sol.truck_routes), ('D', sol.drone_routes)]:
-        for ridx, r in enumerate(routes):
-            n = len(r.sequence)
-            for seg_len in [1, 2, 3]:
-                for seg_start in range(1, n - seg_len):
-                    for ins_pos in range(0, n - 1):
-                        res = _apply_oropt(sol, inst, vtype, ridx,
-                                           seg_start, seg_len, ins_pos)
-                        if res:
-                            neighbors.append(res)
-                            if len(neighbors) >= max_neighbors:
-                                return neighbors
-
-    # ── Move 4: 2-opt* (cross truck routes) ──────────────────────────────
-    for r1_idx in all_truck:
-        r1 = sol.truck_routes[r1_idx]
-        for r2_idx in range(r1_idx + 1, K):
-            r2 = sol.truck_routes[r2_idx]
-            for i in range(0, len(r1.sequence) - 1):
-                for j in range(0, len(r2.sequence) - 1):
-                    res = _apply_2opt_star(sol, inst, r1_idx, i, r2_idx, j)
-                    if res:
-                        neighbors.append(res)
-                        if len(neighbors) >= max_neighbors:
-                            return neighbors
-
-    # ── Move 5: Transfer (C2 giữa truck và drone) ─────────────────────────
-    # Truck → Drone
-    for t_idx in all_truck:
-        tr = sol.truck_routes[t_idx]
-        for src_pos in range(1, len(tr.sequence) - 1):
-            nid = tr.sequence[src_pos]
-            if nid in inst.c1_ids:
-                continue
-            for d_idx in all_drone:
-                res = _apply_transfer(sol, inst,
-                                      'T', t_idx, src_pos,
-                                      'D', d_idx)
-                if res:
-                    neighbors.append(res)
-                    if len(neighbors) >= max_neighbors:
-                        return neighbors
-
-    # Drone → Truck
-    for d_idx in all_drone:
-        dr = sol.drone_routes[d_idx]
-        for src_pos in range(1, len(dr.sequence) - 1):
-            for t_idx in all_truck:
-                res = _apply_transfer(sol, inst,
-                                      'D', d_idx, src_pos,
-                                      'T', t_idx)
-                if res:
-                    neighbors.append(res)
-                    if len(neighbors) >= max_neighbors:
-                        return neighbors
-
-    return neighbors
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Diversification
-# ─────────────────────────────────────────────────────────────────────────────
-
-def diversify(best_sol: Solution, inst: Instance) -> Solution:
-    sol = best_sol.copy()
+    makespan = sol.makespan()
     
-    for r in sol.truck_routes + sol.drone_routes:
-        # AN TOÀN: Nếu tuyến đường có ít hơn 5 phần tử (tức là chỉ có ≤ 2 khách hàng),
-        # bỏ qua không xáo trộn để tránh lỗi tính toán khoảng randint
-        if len(r.sequence) < 5:
-            continue
-            
-        # Tính toán độ dài chuỗi cắt an toàn (tối thiểu là 1)
-        max_seg_len = max(1, len(r.sequence) // 4)
-        seg_len = random.randint(1, max_seg_len)
-        
-        # Tính toán vị trí bắt đầu cắt an toàn
-        upper_bound = len(r.sequence) - 2 - seg_len
-        if upper_bound < 1:
-            continue
-            
-        seg_start = random.randint(1, upper_bound)
-        
-        # --- BẮT ĐẦU GIỮ NGUYÊN LOGIC CŨ CỦA BẠN PHÍA DƯỚI ---
-        # Ví dụ logic cắt và nhét segment cũ của bạn:
-        seg = [r.sequence.pop(seg_start) for _ in range(seg_len)]
-        insert_pos = random.randint(1, len(r.sequence) - 1)
-        for nid in reversed(seg):
-            r.sequence.insert(insert_pos, nid)
-            
-        # Đừng quên cập nhật lại các thông số thời gian/tải trọng của tuyến đường
-        precompute(r, inst)
-        # --- KẾT THÚC LOGIC CŨ ---
-        
-    return sol
+    # Phạt nếu số tuyến xe tải vượt quá giới hạn cấu hình K
+    excess_truck_routes = max(0, len(sol.truck_routes) - inst.num_trucks)
+    # Phạt nếu số tuyến drone vượt quá giới hạn cấu hình D
+    excess_drone_routes = max(0, len(sol.drone_routes) - inst.num_drones)
+    
+    # Thêm các hàm phạt cứng từ file solution của bạn (TW và Capacity)
+    violation_penalty = sol.penalty_tw(inst) * 1000 + sol.penalty_cap(inst) * 1000
+    
+    return makespan + violation_penalty + (excess_truck_routes + excess_drone_routes) * penalty_factor
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Tabu Search chính
-# ─────────────────────────────────────────────────────────────────────────────
-
-@dataclass
-class TabuSearchConfig:
-    max_iter:          int   = 500
-    max_no_improve:    int   = 150
-    diversify_thresh:  int   = 60
-    tenure_base:       int   = 10
-    tenure_delta:      int   = 3
-    max_neighbors:     int   = 300
-    lambda_tw:         float = 50.0
-    lambda_cap:        float = 200.0
-    alpha:             float = 0.5    
-    beta:              float = 0.3    
-    gamma:             float = 0.2    
-    verbose:           bool  = True
-    time_limit:        float = 300.0  
-
-
-def tabu_search(inst: Instance,
-                cfg: TabuSearchConfig = None,
-                init_solution: Solution = None) -> Tuple[Solution, List[float]]:
+def _try_eliminate_virtual_routes(sol: Solution, inst: Instance, penalty_factor: float) -> Optional[Solution]:
     """
-    Tabu Search chinh. Nhan init_solution tu Solomon I1 hoac tu greedy.
+    TOÁN TỬ ĐỘT PHÁ: Chủ động bóc tách các tuyến vượt ngưỡng (Tuyến ảo) 
+    và tìm cách hòa tan hành khách vào các xe chính thức bằng FTS.
     """
-    if cfg is None:
-        cfg = TabuSearchConfig()
+    # Nếu số lượng xe nằm trong phạm vi cho phép -> Không cần xử lý
+    if len(sol.truck_routes) <= inst.num_trucks:
+        return None
+        
+    test_sol = sol.copy()
+    cdata = {c.id: c for c in inst.all_nodes}
+    
+    # Lấy tuyến ảo cuối cùng ra để phá hủy
+    virtual_route = test_sol.truck_routes[-1]
+    customers_to_relocate = virtual_route.sequence[1:-1]
+    
+    success_count = 0
+    for cust_id in customers_to_relocate:
+        cust = cdata[cust_id]
+        inserted = False
+        
+        # Quét qua các xe tải chính thức (nằm trong giới hạn K) để lách vào
+        for r_idx in range(inst.num_trucks):
+            r = test_sol.truck_routes[r_idx]
+            if r.total_load + cust.demand <= inst.truck_capacity:
+                for i in range(len(r.sequence) - 1):
+                    arrive_u = r.a[i] + cdata[r.sequence[i]].service + inst.travel_time(r.sequence[i], cust.id, is_drone=False)
+                    a_u = max(arrive_u, cust.ready)
+                    if a_u <= cust.due:
+                        delay = max(a_u + cust.service + inst.travel_time(cust.id, r.sequence[i+1], is_drone=False), cdata[r.sequence[i+1]].ready) - r.a[i+1]
+                        if delay <= r.F[i+1]: # Bảo đảm an toàn tuyệt đối Time Window bằng FTS
+                            r.sequence.insert(i + 1, cust.id)
+                            precompute(r, inst)
+                            inserted = True
+                            success_count += 1
+                            break
+            if inserted: break
+            
+    # Nếu toàn bộ hành khách của tuyến ảo đã được hấp thụ an toàn vào các xe chính thức
+    if success_count == len(customers_to_relocate):
+        test_sol.truck_routes.pop() # Xóa sổ tuyến ảo hoàn toàn
+        return test_sol
+        
+    return None
 
-    # Khoi tao
-    if init_solution is not None:
-        sol = init_solution.copy()
-    else:
-        sol = greedy_construction(inst, alpha=cfg.alpha,
-                                  beta=cfg.beta, gamma=cfg.gamma)
-    sol.lambda_tw  = cfg.lambda_tw
-    sol.lambda_cap = cfg.lambda_cap
 
-    best_sol  = sol.copy()
-    best_obj  = best_sol.objective(inst)
-
-    tabu      = TabuList(cfg.tenure_base, cfg.tenure_delta)
-    history   = [best_sol.makespan()]
+def advanced_tabu_search(initial_sol: Solution, inst: Instance, cfg: TabuConfig = TabuConfig()) -> Solution:
+    """
+    Thuật toán Tabu Search cải tiến phối hợp chiến lược Hủy tuyến ảo và Phạt động thích nghi
+    """
+    current_sol = initial_sol.copy()
+    best_sol = initial_sol.copy()
+    
+    tabu_list = TabuList()
+    penalty_factor = 5000.0  # Lực phạt ban đầu cho tuyến ảo
+    
+    best_obj = _evaluate_penalty_obj(best_sol, inst, penalty_factor)
     no_improve = 0
-    start_time = time.time()
+    
+    cdata = {c.id: c for c in inst.all_nodes}
 
-    if cfg.verbose:
-        print(f"[Init] makespan={best_sol.makespan():.2f}  "
-              f"obj={best_obj:.2f}  "
-              f"feasible={best_sol.is_feasible(inst)}")
-
-    # ── Vòng lặp chính ───────────────────────────────────────────────────
-    for iteration in range(cfg.max_iter):
-
-        # Điều kiện dừng
-        if no_improve >= cfg.max_no_improve:
+    for iteration in range(cfg.max_iterations):
+        # ── HÀNH ĐỘNG ƯU TIÊN 1: Thử hủy tuyến ảo chủ động ──
+        eliminated_sol = _try_eliminate_virtual_routes(current_sol, inst, penalty_factor)
+        if eliminated_sol is not None:
+            current_sol = eliminated_sol
+            cur_obj = _evaluate_penalty_obj(current_sol, inst, penalty_factor)
+            if cur_obj < best_obj:
+                best_sol = current_sol.copy()
+                best_obj = cur_obj
             if cfg.verbose:
-                print(f"[Stop] no_improve={no_improve} >= {cfg.max_no_improve}")
+                print(f"[{iteration:3d}] 🔥 Đã tiêu diệt và hòa tan thành công 1 Tuyến ảo!")
+            continue
+
+        # ── HÀNH ĐỘNG 2: Tìm kiếm lân cận chuẩn (Neighborhood Search) ──
+        best_neighbor_sol = None
+        best_neighbor_obj = float('inf')
+        chosen_move_attr = (0, 0) # (node_id, target_route)
+
+        # Quét Toán tử Relocate giữa các tuyến xe tải
+        for r_from_idx, r_from in enumerate(current_sol.truck_routes):
+            if len(r_from.sequence) <= 3: continue # Tuyến quá ngắn không bốc khách được
+            
+            for pos in range(1, len(r_from.sequence) - 1):
+                cust_id = r_from.sequence[pos]
+                cust = cdata[cust_id]
+                
+                for r_to_idx, r_to in enumerate(current_sol.truck_routes):
+                    if r_from_idx == r_to_idx: continue
+                    # Kiểm tra nhanh sức chứa xe đích
+                    if r_to.total_load + cust.demand > inst.truck_capacity: continue
+                    
+                    # Thử chèn vào các vị trí có sẵn trên xe đích
+                    for insert_pos in range(len(r_to.sequence) - 1):
+                        neighbor_sol = current_sol.copy()
+                        
+                        # Thực hiện di chuyển nút
+                        neighbor_sol.truck_routes[r_from_idx].sequence.pop(pos)
+                        neighbor_sol.truck_routes[r_to_idx].sequence.insert(insert_pos + 1, cust_id)
+                        
+                        # Cập nhật lại mảng FTS và thời gian
+                        precompute(neighbor_sol.truck_routes[r_from_idx], inst)
+                        precompute(neighbor_sol.truck_routes[r_to_idx], inst)
+                        
+                        neighbor_obj = _evaluate_penalty_obj(neighbor_sol, inst, penalty_factor)
+                        
+                        # Kiểm tra luật cấm Tabu kết hợp điều kiện phá luật (Aspiration Criterion)
+                        is_tabu = tabu_list.is_tabu('relocate', cust_id, r_to_idx, iteration)
+                        if not is_tabu or neighbor_obj < best_obj:
+                            if neighbor_obj < best_neighbor_obj:
+                                best_neighbor_obj = neighbor_obj
+                                best_neighbor_sol = neighbor_sol
+                                chosen_move_attr = (cust_id, r_to_idx)
+
+        # Nếu không tìm được bước đi lân cận nào hợp lệ, thoát vòng lặp
+        if best_neighbor_sol is None:
+            if cfg.verbose: print("Không tìm thấy lân cận hợp lệ. Dừng giải thuật.")
             break
-        if time.time() - start_time > cfg.time_limit:
-            if cfg.verbose:
-                print(f"[Stop] time limit {cfg.time_limit:.0f}s reached")
-            break
 
-        # Sinh lân cận
-        neighbors = generate_neighborhood(sol, inst, cfg.max_neighbors)
+        # Chấp nhận bước đi tốt nhất vùng lặp
+        current_sol = best_neighbor_sol
+        tabu_list.add('relocate', chosen_move_attr[0], chosen_move_attr[1], iteration, cfg.tabu_tenure)
 
-        if not neighbors:
-            if cfg.verbose:
-                print(f"[{iteration}] No neighbors found, stopping.")
-            break
-
-        # Sắp xếp theo delta (tốt nhất trước)
-        neighbors.sort(key=lambda x: x[0])
-
-        # Chọn nghiệm tốt nhất không bị cấm (hoặc aspiration)
-        chosen = None
-        for delta, mtype, attr, new_sol in neighbors:
-            is_tabu    = tabu.is_tabu(mtype, attr, iteration)
-            aspiration = new_sol.objective(inst) < best_obj
-
-            if not is_tabu or aspiration:
-                chosen = (delta, mtype, attr, new_sol)
-                break
-
-        if chosen is None:
-            # Tất cả đều bị cấm → lấy cái ít bị cấm nhất (tenure ngắn nhất)
-            chosen = neighbors[0]
-
-        delta, mtype, attr, new_sol = chosen
-
-        # Cập nhật Tabu List
-        tabu.add(mtype, attr, iteration)
-        tabu.cleanup(iteration)
-
-        # Chuyển sang nghiệm mới
-        sol = new_sol
-        cur_obj = sol.objective(inst)
-
-        if cur_obj < best_obj:
-            best_sol   = sol.copy()
-            best_obj   = cur_obj
-            no_improve = 0
-            if cfg.verbose:
-                print(f"[{iteration:4d}] + makespan={best_sol.makespan():.2f}  "
-                      f"obj={best_obj:.2f}  "
-                      f"move={mtype}  feasible={best_sol.is_feasible(inst)}")
-        else:
+        # ── CƠ CHẾ PHẠT ĐỘNG THÍCH NGHI (Strategic Oscillation) ──
+        is_current_feasible = len(current_sol.truck_routes) <= inst.num_trucks and current_sol.is_feasible(inst)
+        if not is_current_feasible:
+            penalty_factor *= 1.1  # Nghiệm vi phạm xe tải phụ -> Tăng phạt để ép thu gọn tuyến
             no_improve += 1
+        else:
+            penalty_factor *= 0.95 # Nghiệm hoàn toàn sạch -> Giảm phạt để mở rộng tìm kiếm không gian biên
+            
+            current_actual_obj = current_sol.makespan()
+            if current_actual_obj < best_obj:
+                best_sol = current_sol.copy()
+                best_obj = current_actual_obj
+                no_improve = 0
 
-        history.append(best_sol.makespan())
+        if cfg.verbose and iteration % 20 == 0:
+            print(f"Iteration {iteration:3d} | Best Makespan: {best_sol.makespan():.2f} | Tuyến hiện tại: {len(current_sol.truck_routes)} (Mục tiêu: {inst.num_trucks})")
 
-        # Diversification
-        if no_improve == cfg.diversify_thresh:
-            if cfg.verbose:
-                print(f"[{iteration:4d}] ~ Diversification...")
-            sol        = diversify(best_sol, inst)
-            sol.lambda_tw  = cfg.lambda_tw
-            sol.lambda_cap = cfg.lambda_cap
-            no_improve = 0
-            tabu.increase_tenure()
+    # Cắt tỉa các tuyến rỗng dư thừa trước khi trả về nghiệm cuối cùng
+    best_sol.truck_routes = [r for r in best_sol.truck_routes if len(r.sequence) > 2]
+    while len(best_sol.truck_routes) < inst.num_trucks:
+        r = Route(sequence=[0, 0], is_drone=False)
+        precompute(r, inst)
+        best_sol.truck_routes.append(r)
 
-    if cfg.verbose:
-        elapsed = time.time() - start_time
-        print(f"\n[Done] iter={iteration+1}, time={elapsed:.1f}s")
-        print(best_sol.summary(inst))
-
-    return best_sol, history
+    return best_sol

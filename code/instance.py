@@ -1,31 +1,8 @@
-"""
-instance.py — Đọc và lưu trữ dữ liệu bài toán MVRPD-TW
-
-Hỗ trợ định dạng file Solomon-style (VRPTW benchmark):
-  - Cột: ID  x  y  demand  ready_time  due_time  service_time
-  - Dòng đầu: tên instance
-  - Dòng thông số: num_vehicles  capacity
-  - Các dòng còn lại: dữ liệu khách hàng (dòng 0 = depot)
-
-Ví dụ file:
-  C101
-  VEHICLE   NUMBER  CAPACITY
-  TRUCK      25      200
-  DRONE       5       10
-  ...
-  CUSTOMER   CUST   XCOORD  YCOORD  DEMAND  READY   DUE   SERVICE
-  ...
-        0       0    40.0    50.0      0      0      1236      0
-        1       1    45.0    68.0     10     912     967      90
-  ...
-"""
-
-from __future__ import annotations
+import json
+import os
 import math
-import re
 from dataclasses import dataclass, field
 from typing import List, Set
-
 
 @dataclass
 class Customer:
@@ -38,7 +15,6 @@ class Customer:
     service: float    # s_i  (service time)
     is_c1: bool = False   # True => chỉ truck phục vụ được
 
-
 @dataclass
 class Instance:
     name: str
@@ -46,13 +22,15 @@ class Instance:
     num_drones: int
     truck_capacity: float
     drone_capacity: float
-    drone_range: float        # L_D: tổng tầm bay tối đa (km)
-    depot: Customer
-    customers: List[Customer]   # không kể depot
-    c1_ids: Set[int] = field(default_factory=set)   # ID khách hàng C1
-    c2_ids: Set[int] = field(default_factory=set)   # ID khách hàng C2
+    drone_range: float        # L_D: tổng tầm bay tối đa
+    truck_speed: float = 1.0  # <--- THÊM MỚI
+    drone_speed: float = 1.5  # <--- THÊM MỚI
+    depot: Customer = None
+    customers: List[Customer] = field(default_factory=list)
+    c1_ids: Set[int] = field(default_factory=set)
+    c2_ids: Set[int] = field(default_factory=set)
 
-    # Ma trận khoảng cách (tính sẵn)
+    # Ma trận khoảng cách
     _dist: List[List[float]] = field(default_factory=list, repr=False)
 
     def build_dist(self):
@@ -67,15 +45,11 @@ class Instance:
                 self._dist[i][j] = math.hypot(dx, dy)
 
     def dist(self, i: int, j: int) -> float:
-        """Khoảng cách giữa node i và node j (0 = depot)."""
         return self._dist[i][j]
 
-    def travel_time(self, i: int, j: int,
-                    truck_speed: float = 1.0,
-                    drone_speed: float = 1.5,
-                    is_drone: bool = False) -> float:
-        """Thời gian di chuyển (mặc định speed=1 → thời gian = khoảng cách)."""
-        speed = drone_speed if is_drone else truck_speed
+    def travel_time(self, i: int, j: int, is_drone: bool = False) -> float:
+        """Sử dụng trực tiếp vận tốc được cấu hình trong Instance"""
+        speed = self.drone_speed if is_drone else self.truck_speed
         return self._dist[i][j] / speed
 
     @property
@@ -83,19 +57,9 @@ class Instance:
         return [self.depot] + self.customers
 
     def __repr__(self):
-        return (f"Instance({self.name!r}, "
-                f"trucks={self.num_trucks}, drones={self.num_drones}, "
+        return (f"Instance({self.name!r}, trucks={self.num_trucks}, drones={self.num_drones}, "
+                f"truck_speed={self.truck_speed}, drone_speed={self.drone_speed}, "
                 f"|C|={len(self.customers)}, |C1|={len(self.c1_ids)}, |C2|={len(self.c2_ids)})")
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Hàm đọc file
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _nums(line: str) -> List[float]:
-    """Trích xuất tất cả số trên một dòng."""
-    return [float(x) for x in re.findall(r'[-+]?\d*\.?\d+', line)]
-
 
 def read_solomon(
     filepath: str,
@@ -193,88 +157,91 @@ def read_solomon(
             c2_ids.add(cid)
         customers.append(cust)
 
+def read_json_instance(filepath: str) -> Instance:
+    """
+    Đọc chính xác thông số cấu hình từ file JSON bài toán MVRPD-TW 
+    Bỏ qua thời điểm phát sinh request (cột index 4).
+    """
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    
+    instance_name = os.path.splitext(os.path.basename(filepath))[0]
+    requests = data["requests"]
+    if not requests:
+        raise ValueError(f"File {filepath} không chứa dữ liệu requests.")
+        
+    # Đọc metadata cấu hình hệ thống xe
+    num_trucks = int(data.get("truck_num", 1))
+    num_drones = int(data.get("drone_num", 1))
+    truck_capacity = float(data.get("truck_cap", 400.0))
+    drone_capacity = float(data.get("drone_cap", 2.27))
+    drone_range = float(data.get("drone_lim", 700.0))
+    
+    # Đọc vận tốc xe
+    truck_speed = float(data.get("truck_vel", 1.0))
+    drone_speed = float(data.get("drone_vel", 1.5))
+    
+    # Đọc thời gian đóng cửa kho trung tâm (Depot due time) từ trường "close" ngoài cùng
+    depot_close_time = float(data.get("close", 998.708))
+    
+    # Node đầu tiên (index 0) luôn là Depot
+    d_raw = requests[0]
+    depot = Customer(
+        id=0,
+        x=float(d_raw[0]),
+        y=float(d_raw[1]),
+        demand=float(d_raw[2]),
+        ready=0.0,                # Kho mở cửa từ thời điểm 0
+        due=depot_close_time,     # Lấy chính xác từ trường "close" ngoài cùng
+        service=0.0,              # Tại kho không tốn thời gian phục vụ
+        is_c1=False
+    )
+    
+    customers = []
+    c1_ids, c2_ids = set(), set()
+    
+    # Duyệt qua các khách hàng (từ index 1 trở đi)
+    for idx, r_raw in enumerate(requests[1:], start=1):
+        is_c1_type = int(r_raw[3]) == 1
+        
+        # Trích xuất chính xác theo thứ tự cột mới
+        ready_time = float(r_raw[5])  # Cột index 5 là Ready Time
+        due_time = float(r_raw[6])    # Cột index 6 là Due Time
+        
+        # Tính toán Service Time = Due - Ready
+        service_time = max(0.0, due_time - ready_time)
+        
+        cust = Customer(
+            id=idx,
+            x=float(r_raw[0]),
+            y=float(r_raw[1]),
+            demand=float(r_raw[2]),
+            ready=ready_time,
+            due=due_time,
+            service=service_time,     # Gán service time vừa tính được
+            is_c1=is_c1_type
+        )
+        
+        customers.append(cust)
+        if is_c1_type:
+            c1_ids.add(idx)
+        else:
+            c2_ids.add(idx)
+            
     inst = Instance(
-        name=name,
+        name=instance_name,
         num_trucks=num_trucks,
         num_drones=num_drones,
         truck_capacity=truck_capacity,
         drone_capacity=drone_capacity,
         drone_range=drone_range,
+        truck_speed=truck_speed,
+        drone_speed=drone_speed,
         depot=depot,
         customers=customers,
         c1_ids=c1_ids,
-        c2_ids=c2_ids,
+        c2_ids=c2_ids
     )
-    inst.build_dist()
-    return inst
-
-
-def read_custom(filepath: str) -> Instance:
-    """
-    Đọc file định dạng tùy chỉnh:
-
-    Dòng 1 : tên instance
-    Dòng 2 : num_trucks  num_drones  truck_cap  drone_cap  drone_range
-    Dòng 3+: id  x  y  demand  ready  due  service  [type]
-              type = 0 → C2 (linh hoạt), 1 → C1 (chỉ truck)
-              (dòng id=0 là depot, type bỏ qua)
-
-    Ví dụ:
-        MY_INSTANCE
-        2 2 200 30 100
-        0  40  50   0    0  1236  0
-        1  45  68  10  912   967 90   0
-        2  55  60  25  825   870 90   1
-    """
-    with open(filepath, 'r') as f:
-        lines = [l.strip() for l in f if l.strip() and not l.startswith('#')]
-
-    name = lines[0]
-    params = _nums(lines[1])
-    num_trucks  = int(params[0])
-    num_drones  = int(params[1])
-    truck_cap   = params[2]
-    drone_cap   = params[3]
-    drone_range = params[4]
-
-    depot = None
-    customers = []
-    c1_ids, c2_ids = set(), set()
-
-    for line in lines[2:]:
-        nums = _nums(line)
-        if len(nums) < 7:
-            continue
-        cid = int(nums[0])
-        ctype = int(nums[7]) if len(nums) >= 8 else 0
-        c = Customer(
-            id=cid, x=nums[1], y=nums[2], demand=nums[3],
-            ready=nums[4], due=nums[5], service=nums[6],
-            is_c1=(ctype == 1)
-        )
-        if cid == 0:
-            depot = c
-        else:
-            customers.append(c)
-            if c.is_c1:
-                c1_ids.add(cid)
-            else:
-                c2_ids.add(cid)
-
-    if depot is None:
-        raise ValueError("Không tìm thấy depot (id=0) trong file.")
-
-    inst = Instance(
-        name=name,
-        num_trucks=num_trucks,
-        num_drones=num_drones,
-        truck_capacity=truck_cap,
-        drone_capacity=drone_cap,
-        drone_range=drone_range,
-        depot=depot,
-        customers=customers,
-        c1_ids=c1_ids,
-        c2_ids=c2_ids,
-    )
+    
     inst.build_dist()
     return inst

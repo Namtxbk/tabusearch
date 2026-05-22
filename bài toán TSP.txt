@@ -1,7 +1,3 @@
-bài toán TSP : 
-- 
-Bài toán VRP : 
-- 
 
 Lời giải ban đầu 
 - xây dung lời giai ban dau du tot 
