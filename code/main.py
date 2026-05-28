@@ -1,115 +1,101 @@
-import argparse
 import sys
 import os
 import time
-import glob
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from instance import read_solomon, read_json_instance, Instance, Customer
+from instance import read_json_instance, Instance
 from solution import Solution
 from solomon_i1 import solomon_i1_construction, multi_start_i1
-from tabu_search import tabu_search, TabuSearchConfig
+from tabu_search import advanced_tabu_search, TabuConfig
 
-def process_single_instance(inst: Instance, args):
-    print(f"\n" + "="*65)
-    print(f"XỬ LÝ INSTANCE: {inst.name}")
-    print(f"="*65)
-    print(f"Cấu hình đọc từ JSON:")
-    print(f"  - Số Truck: {inst.num_trucks} (Tải trọng: {inst.truck_capacity}) | Vận tốc: {inst.truck_speed}")
-    print(f"  - Số Drone: {inst.num_drones} (Tải trọng: {inst.drone_capacity} | Tầm bay: {inst.drone_range}) | Vận tốc: {inst.drone_speed}")
-    print(f"  - Số Khách hàng: {len(inst.customers)} (C1: {len(inst.c1_ids)}, C2: {len(inst.c2_ids)})")
-    print(f"  - Danh sách C1 (Chỉ Truck): {sorted(inst.c1_ids)}\n")
+# ─────────────────────────────────────────────────────────────────────────────
+# CẤU HÌNH: Điền tên file JSON vào list bên dưới
+# Ví dụ: ["6_5_1.json", "10_5_1.json", "15_5_1.json"]
+# ─────────────────────────────────────────────────────────────────────────────
+
+TEST_FILES = [
+    "6.5.1.json",
+    "10.5.1.json",
+]
+
+# Thư mục chứa các file JSON (thay đổi nếu cần)
+DATA_DIR = "WithTimeWindows"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cấu hình thuật toán
+# ─────────────────────────────────────────────────────────────────────────────
+
+TABU_CFG = TabuConfig(
+    max_iterations   = 500,
+    tabu_tenure      = 10,
+    diversify_thresh = 40,
+    verbose          = False,
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+
+def process_instance(filepath: str):
+    print(f"\n{'='*65}")
+    print(f"FILE: {os.path.basename(filepath)}")
+    print(f"{'='*65}")
+
+    inst = read_json_instance(filepath)
+
+    print(f"  Trucks   : {inst.num_trucks}  (cap={inst.truck_capacity}, speed={inst.truck_speed})")
+    print(f"  Drones   : {inst.num_drones}  (cap={inst.drone_capacity}, range={inst.drone_range}, speed={inst.drone_speed})")
+    print(f"  Khách    : {len(inst.customers)}  (C1/chỉ-truck={len(inst.c1_ids)}, C2/drone-ok={len(inst.c2_ids)})")
+    print(f"  C1 ids   : {sorted(inst.c1_ids)}")
+    print(f"  Depot    : x={inst.depot.x:.2f}, y={inst.depot.y:.2f}, due={inst.depot.due:.2f}")
 
     # 1. Construction
     t0 = time.time()
-    if args.multi_start > 1:
-        init_sol = multi_start_i1(inst, n_starts=args.multi_start)
-    else:
-        init_sol = solomon_i1_construction(inst, mu=args.mu, lam=args.lam)
+    init_sol = solomon_i1_construction(inst)
+    t_con = time.time() - t0
 
-    print(f" [Construction] Done trong {time.time()-t0:.3f}s | "
-          f"Makespan ban đầu: {init_sol.makespan():.1f} | "
-          f"Feasible: {init_sol.is_feasible(inst)}")
+    print(f"\n  [Construction] {t_con:.3f}s  |  "
+          f"Makespan: {init_sol.makespan():.2f}  |  "
+          f"Feasible: {init_sol.is_feasible(inst)}  |  "
+          f"All served: {init_sol.all_served(inst)}")
 
     # 2. Tabu Search
-    print(" [Tabu Search] Đang chạy tối ưu...")
-    cfg = TabuSearchConfig(
-        max_iter        = args.iter,
-        max_no_improve  = max(100, args.iter // 4),
-        diversify_thresh= max(40,  args.iter // 8),
-        tenure_base     = args.tenure,
-        time_limit      = args.time,
-        verbose         = not args.quiet,
-    )
-    
-    try:
-        best_sol, history = tabu_search(inst, cfg, init_solution=init_sol)
-        print("\n [KẾT QUẢ CUỐI CÙNG]")
-        print(best_sol.summary(inst))
-        if len(history) > 1:
-            print(f" Cải thiện: {history[0]:.1f} → {history[-1]:.1f} (Giảm {history[0]-history[-1]:.1f})")
-    except Exception as e:
-        print(f" [LỖI] Thất bại tại Tabu Search: {e}")
+    t0 = time.time()
+    best_sol = advanced_tabu_search(init_sol, inst, TABU_CFG)
+    t_ts = time.time() - t0
+
+    print(f"  [Tabu Search]  {t_ts:.3f}s  |  "
+          f"Makespan: {best_sol.makespan():.2f}  |  "
+          f"Feasible: {best_sol.is_feasible(inst)}  |  "
+          f"All served: {best_sol.all_served(inst)}")
+
+    print(f"\n{best_sol.summary(inst)}")
+
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--path',        type=str,   default='WithTimeWindowns3')
-    parser.add_argument('--format',      type=str,   default='json', choices=['solomon', 'custom', 'json'])
-    parser.add_argument('--iter',        type=int,   default=500)
-    parser.add_argument('--tenure',      type=int,   default=10)
-    parser.add_argument('--time',        type=float, default=120.0)
-    parser.add_argument('--mu',          type=float, default=0.5)
-    parser.add_argument('--lam',         type=float, default=1.0)
-    parser.add_argument('--multi-start', type=int,   default=1)
-    parser.add_argument('--quiet',       action='store_true', default=True)
-    
-    # Giữ lại các tham số cũ làm phương án dự phòng cho file TXT/Solomon nếu cần
-    parser.add_argument('--trucks',      type=int,   default=2)
-    parser.add_argument('--drones',      type=int,   default=2)
-    parser.add_argument('--truck-cap',   type=float, default=None)
-    parser.add_argument('--drone-cap',   type=float, default=30.0)
-    parser.add_argument('--range',       type=float, default=100.0)
-    args = parser.parse_args()
+    print(f"Số file cần chạy: {len(TEST_FILES)}")
 
-    target_path = args.path
+    for fname in TEST_FILES:
+        # Thử tìm file theo thứ tự: cùng thư mục → DATA_DIR → đường dẫn tuyệt đối
+        candidates = [
+            fname,
+            os.path.join(DATA_DIR, fname),
+            os.path.join(os.path.dirname(__file__), fname),
+            os.path.join(os.path.dirname(__file__), DATA_DIR, fname),
+        ]
+        filepath = next((p for p in candidates if os.path.isfile(p)), None)
 
-    if not os.path.exists(target_path):
-        print(f"Đường dẫn không tồn tại: {target_path}")
-        return
+        if filepath is None:
+            print(f"\n[KHÔNG TÌM THẤY] {fname}  "
+                  f"(đã tìm: {', '.join(candidates)})")
+            continue
 
-    if os.path.isdir(target_path):
-        if args.format == 'json':
-            files = glob.glob(os.path.join(target_path, "*.json"))
-        else:
-            files = glob.glob(os.path.join(target_path, "*.txt"))
-            
-        if not files:
-            print(f"Không tìm thấy file định dạng '{args.format}' trong thư mục '{target_path}'")
-            return
-            
-        print(f"Tìm thấy {len(files)} file cấu hình. Bắt đầu quét hàng loạt...")
-        for filepath in sorted(files):
-            try:
-                if args.format == 'json':
-                    inst = read_json_instance(filepath)
-                elif args.format == 'solomon':
-                    inst = read_solomon(filepath, num_trucks=args.trucks, num_drones=args.drones)
-                else:
-                    inst = read_custom(filepath)
-                
-                process_single_instance(inst, args)
-            except Exception as e:
-                print(f"Lỗi khi xử lý file {filepath}: {e}")
-    else:
-        if args.format == 'json':
-            inst = read_json_instance(target_path)
-        elif args.format == 'solomon':
-            inst = read_solomon(target_path, num_trucks=args.trucks, num_drones=args.drones)
-        else:
-            inst = read_custom(target_path)
-            
-        process_single_instance(inst, args)
+        try:
+            process_instance(filepath)
+        except Exception as e:
+            import traceback
+            print(f"\n[LỖI] {fname}: {e}")
+            traceback.print_exc()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
