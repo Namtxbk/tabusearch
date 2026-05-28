@@ -122,10 +122,10 @@ def read_json_instance(filepath: str) -> Instance:
 
     for idx, r_raw in enumerate(requests[1:], start=1):
         # Cột 3: ableServiceByDrone
-        #   1 → chỉ truck (is_c1 = True)
-        #   0 → truck hoặc drone (is_c1 = False)
+        #   1 → khách hàng CHO PHÉP drone giao (drone nhận hay không tùy capacity/range)
+        #   0 → khách hàng KHÔNG cho phép drone → chỉ truck (is_c1 = True)
         able_drone = int(r_raw[3])
-        is_c1_flag = (able_drone == 1)
+        is_c1_flag = (able_drone == 0)
 
         # Cột 4: r_i — thời điểm phát sinh request → BỎ QUA
         # Cột 5: opentime  → ready
