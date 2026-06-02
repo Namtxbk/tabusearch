@@ -1,198 +1,210 @@
-
-
+"""
+tabu_search.py — Tabu Search nâng cao với Phạt Động và Toán tử Tái cấu trúc tuyến (ALNS)
+"""
 from __future__ import annotations
 import random
-import time
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Optional, Set
+from typing import List, Tuple, Set, Optional
 
 from instance import Instance, Customer
-from solution import Route, Solution, precompute
-
+from solution import Trip, Vehicle, Solution, precompute_vehicle
 
 @dataclass
-class TabuConfig:
-    max_iterations: int = 200
-    tabu_tenure: int = 15
-    diversify_thresh: int = 30
+class TabuSearchConfig:
+    max_iter: int = 1000
+    max_no_improve: int = 200
+    tenure_base: int = 7
+    time_limit: float = 60.0
     verbose: bool = True
 
-
-class TabuList:
+class TabuSet:
     def __init__(self):
-        self.matrix: Dict[Tuple[str, int, int], int] = {}
+        self.matrix = {}
+    def add(self, key: Tuple[int, int, int], current_iter: int):
+        self.matrix[key] = current_iter
+    def is_tabu(self, key: Tuple[int, int, int], current_iter: int) -> bool:
+        if key in self.matrix:
+            return current_iter <= self.matrix[key] + 10
+        return False
 
-    def add(self, move_type: str, node_id: int, target_route: int, current_iter: int, tenure: int):
-        self.matrix[(move_type, node_id, target_route)] = current_iter + tenure
-
-    def is_tabu(self, move_type: str, node_id: int, target_route: int, current_iter: int) -> bool:
-        return self.matrix.get((move_type, node_id, target_route), 0) > current_iter
-
-
-def _evaluate_penalty_obj(sol: Solution, inst: Instance, penalty_factor: float) -> float:
+def ruin_and_recreate_neighborhood(
+    sol: Solution, inst: Instance, tabu: TabuSet, it: int, best_obj: float,
+    w_cap: float, w_range: float, w_tw: float
+) -> Tuple[Optional[Solution], float, Optional[Tuple[int, int, int, int]]]:
     """
-    Hàm mục tiêu tổng hợp tính toán Makespan cộng với 
-    điểm phạt nặng cho các Tuyến ảo vượt quá giới hạn cấu hình (K và D).
+    Toán tử Ruin & Recreate CẢI TIẾN: Hỗ trợ linh hoạt chèn vào chuyến cũ HOẶC TÁCH CHUYẾN MỚI.
     """
-    makespan = sol.makespan()
+    new_sol = sol.copy()
+    all_cust_ids = [c.id for c in inst.customers]
     
-    # Phạt nếu số tuyến xe tải vượt quá giới hạn cấu hình K
-    excess_truck_routes = max(0, len(sol.truck_routes) - inst.num_trucks)
-    # Phạt nếu số tuyến drone vượt quá giới hạn cấu hình D
-    excess_drone_routes = max(0, len(sol.drone_routes) - inst.num_drones)
+    # Tăng tỷ lệ nhấc khách lên 20-30% để khuấy động không gian tìm kiếm mạnh hơn
+    num_to_remove = max(2, int(len(all_cust_ids) * 0.25))
+    removed_custs = random.sample(all_cust_ids, num_to_remove)
     
-    # Thêm các hàm phạt cứng từ file solution của bạn (TW và Capacity)
-    violation_penalty = sol.penalty_tw(inst) * 1000 + sol.penalty_cap(inst) * 1000
-    
-    return makespan + violation_penalty + (excess_truck_routes + excess_drone_routes) * penalty_factor
-
-
-def _try_eliminate_virtual_routes(sol: Solution, inst: Instance, penalty_factor: float) -> Optional[Solution]:
-    """
-    TOÁN TỬ ĐỘT PHÁ: Chủ động bóc tách các tuyến vượt ngưỡng (Tuyến ảo) 
-    và tìm cách hòa tan hành khách vào các xe chính thức bằng FTS.
-    """
-    # Nếu số lượng xe nằm trong phạm vi cho phép -> Không cần xử lý
-    if len(sol.truck_routes) <= inst.num_trucks:
-        return None
-        
-    test_sol = sol.copy()
-    cdata = {c.id: c for c in inst.all_nodes}
-    
-    # Lấy tuyến ảo cuối cùng ra để phá hủy
-    virtual_route = test_sol.truck_routes[-1]
-    customers_to_relocate = virtual_route.sequence[1:-1]
-    
-    success_count = 0
-    for cust_id in customers_to_relocate:
-        cust = cdata[cust_id]
-        inserted = False
-        
-        # Quét qua các xe tải chính thức (nằm trong giới hạn K) để lách vào
-        for r_idx in range(inst.num_trucks):
-            r = test_sol.truck_routes[r_idx]
-            if r.total_load + cust.demand <= inst.truck_capacity:
-                for i in range(len(r.sequence) - 1):
-                    arrive_u = r.a[i] + cdata[r.sequence[i]].service + inst.travel_time(r.sequence[i], cust.id, is_drone=False)
-                    a_u = max(arrive_u, cust.ready)
-                    if a_u <= cust.due:
-                        delay = max(a_u + cust.service + inst.travel_time(cust.id, r.sequence[i+1], is_drone=False), cdata[r.sequence[i+1]].ready) - r.a[i+1]
-                        if delay <= r.F[i+1]: # Bảo đảm an toàn tuyệt đối Time Window bằng FTS
-                            r.sequence.insert(i + 1, cust.id)
-                            precompute(r, inst)
-                            inserted = True
-                            success_count += 1
-                            break
-            if inserted: break
+    # 1. RUIN: Nhấc khách ra khỏi hệ thống
+    for v in new_sol.trucks + new_sol.drones:
+        for t in v.trips:
+            t.sequence = [n for n in t.sequence if n not in removed_custs]
             
-    # Nếu toàn bộ hành khách của tuyến ảo đã được hấp thụ an toàn vào các xe chính thức
-    if success_count == len(customers_to_relocate):
-        test_sol.truck_routes.pop() # Xóa sổ tuyến ảo hoàn toàn
-        return test_sol
-        
-    return None
-
-
-def advanced_tabu_search(initial_sol: Solution, inst: Instance, cfg: TabuConfig = TabuConfig()) -> Solution:
-    """
-    Thuật toán Tabu Search cải tiến phối hợp chiến lược Hủy tuyến ảo và Phạt động thích nghi
-    """
-    current_sol = initial_sol.copy()
-    best_sol = initial_sol.copy()
-    
-    tabu_list = TabuList()
-    penalty_factor = 5000.0  # Lực phạt ban đầu cho tuyến ảo
-    
-    best_obj = _evaluate_penalty_obj(best_sol, inst, penalty_factor)
-    no_improve = 0
-    
-    cdata = {c.id: c for c in inst.all_nodes}
-
-    for iteration in range(cfg.max_iterations):
-        # ── HÀNH ĐỘNG ƯU TIÊN 1: Thử hủy tuyến ảo chủ động ──
-        eliminated_sol = _try_eliminate_virtual_routes(current_sol, inst, penalty_factor)
-        if eliminated_sol is not None:
-            current_sol = eliminated_sol
-            cur_obj = _evaluate_penalty_obj(current_sol, inst, penalty_factor)
-            if cur_obj < best_obj:
-                best_sol = current_sol.copy()
-                best_obj = cur_obj
-            if cfg.verbose:
-                print(f"[{iteration:3d}] 🔥 Đã tiêu diệt và hòa tan thành công 1 Tuyến ảo!")
-            continue
-
-        # ── HÀNH ĐỘNG 2: Tìm kiếm lân cận chuẩn (Neighborhood Search) ──
-        best_neighbor_sol = None
-        best_neighbor_obj = float('inf')
-        chosen_move_attr = (0, 0) # (node_id, target_route)
-
-        # Quét Toán tử Relocate giữa các tuyến xe tải
-        for r_from_idx, r_from in enumerate(current_sol.truck_routes):
-            if len(r_from.sequence) <= 3: continue # Tuyến quá ngắn không bốc khách được
+    # XÓA SẠCH các chuyến rỗng (chỉ còn [0, 0]) để tái cấu trúc
+    for v in new_sol.trucks + new_sol.drones:
+        v.trips = [t for t in v.trips if len(t.sequence) > 2]
+        # Nếu xe không còn chuyến nào, cấp tạm 1 chuyến rỗng làm gốc
+        if not v.trips:
+            v.trips = [Trip(sequence=[0, 0], is_drone=v.is_drone)]
             
-            for pos in range(1, len(r_from.sequence) - 1):
-                cust_id = r_from.sequence[pos]
-                cust = cdata[cust_id]
-                
-                for r_to_idx, r_to in enumerate(current_sol.truck_routes):
-                    if r_from_idx == r_to_idx: continue
-                    # Kiểm tra nhanh sức chứa xe đích
-                    if r_to.total_load + cust.demand > inst.truck_capacity: continue
+    # 2. RECREATE: Chèn lại thông minh (Hỗ trợ sinh Multi-Trip)
+    for cust_id in removed_custs:
+        cust_obj = inst.customers[cust_id - 1]
+        best_insert_sol = None
+        best_insert_score = float('inf')
+        best_key = None
+        
+        vehicles_to_try = new_sol.drones if _drone_eligible(cust_obj, inst) else new_sol.trucks
+        
+        for v_idx, v in enumerate(vehicles_to_try):
+            
+            # CHIẾN LƯỢC A: Thử chèn vào bên trong các Trip ĐANG CÓ
+            for t_idx, t in enumerate(v.trips):
+                for pos in range(1, len(t.sequence)):
+                    temp_sol = new_sol.copy()
+                    target_v = temp_sol.drones[v_idx] if v.is_drone else temp_sol.trucks[v_idx]
+                    target_v.trips[t_idx].sequence.insert(pos, cust_id)
                     
-                    # Thử chèn vào các vị trí có sẵn trên xe đích
-                    for insert_pos in range(len(r_to.sequence) - 1):
-                        neighbor_sol = current_sol.copy()
+                    temp_sol.recompute_all(inst)
+                    score = (temp_sol.makespan() + 
+                             w_cap * temp_sol.penalty_cap(inst) + 
+                             w_range * temp_sol.penalty_range(inst) + 
+                             w_tw * temp_sol.penalty_tw(inst))
+                    
+                    key = (cust_id, v_idx, t_idx, pos)
+                    if score < best_insert_score:
+                        if not tabu.is_tabu(key, it) or score < best_obj:
+                            best_insert_score = score
+                            best_insert_sol = temp_sol
+                            best_key = key
+                            
+            # CHIẾN LƯỢC B: Thử tạo hẳn một Trip MỚI (Tách chuyến)
+            # Trip mới có thể được chèn vào trước, giữa, hoặc sau các chuyến hiện tại của xe
+            for insert_t_idx in range(len(v.trips) + 1):
+                temp_sol = new_sol.copy()
+                target_v = temp_sol.drones[v_idx] if v.is_drone else temp_sol.trucks[v_idx]
+                
+                # Khởi tạo một chuyến đi chỉ có 1 khách này
+                new_trip = Trip(sequence=[0, cust_id, 0], is_drone=target_v.is_drone)
+                target_v.trips.insert(insert_t_idx, new_trip)
+                
+                temp_sol.recompute_all(inst)
+                score = (temp_sol.makespan() + 
+                         w_cap * temp_sol.penalty_cap(inst) + 
+                         w_range * temp_sol.penalty_range(inst) + 
+                         w_tw * temp_sol.penalty_tw(inst))
+                
+                # Dùng pos = -1 để đánh dấu đây là key của việc sinh chuyến mới
+                key = (cust_id, v_idx, insert_t_idx, -1)
+                if score < best_insert_score:
+                    if not tabu.is_tabu(key, it) or score < best_obj:
+                        best_insert_score = score
+                        best_insert_sol = temp_sol
+                        best_key = key
                         
-                        # Thực hiện di chuyển nút
-                        neighbor_sol.truck_routes[r_from_idx].sequence.pop(pos)
-                        neighbor_sol.truck_routes[r_to_idx].sequence.insert(insert_pos + 1, cust_id)
-                        
-                        # Cập nhật lại mảng FTS và thời gian
-                        precompute(neighbor_sol.truck_routes[r_from_idx], inst)
-                        precompute(neighbor_sol.truck_routes[r_to_idx], inst)
-                        
-                        neighbor_obj = _evaluate_penalty_obj(neighbor_sol, inst, penalty_factor)
-                        
-                        # Kiểm tra luật cấm Tabu kết hợp điều kiện phá luật (Aspiration Criterion)
-                        is_tabu = tabu_list.is_tabu('relocate', cust_id, r_to_idx, iteration)
-                        if not is_tabu or neighbor_obj < best_obj:
-                            if neighbor_obj < best_neighbor_obj:
-                                best_neighbor_obj = neighbor_obj
-                                best_neighbor_sol = neighbor_sol
-                                chosen_move_attr = (cust_id, r_to_idx)
+        if best_insert_sol is not None:
+            new_sol = best_insert_sol
+            if best_key:
+                tabu.add(best_key, it)
+                
+    new_sol.recompute_all(inst)
+    total_score = (new_sol.makespan() + 
+                   w_cap * new_sol.penalty_cap(inst) + 
+                   w_range * new_sol.penalty_range(inst) + 
+                   w_tw * new_sol.penalty_tw(inst))
+    return new_sol, total_score, None
 
-        # Nếu không tìm được bước đi lân cận nào hợp lệ, thoát vòng lặp
-        if best_neighbor_sol is None:
-            if cfg.verbose: print("Không tìm thấy lân cận hợp lệ. Dừng giải thuật.")
+def advanced_tabu_search(init_sol: Solution, inst: Instance, cfg: TabuSearchConfig) -> Tuple[Solution, List[float]]:
+    """
+    Thuật toán Tabu Search tích hợp cơ chế Phạt Động (Strategic Oscillation).
+    """
+    current = init_sol.copy()
+    best = init_sol.copy()
+    
+    # Khởi tạo trọng số phạt ban đầu mềm dẻo
+    w_cap, w_range, w_tw = 50.0, 50.0, 50.0
+    
+    current.recompute_all(inst)
+    best_obj_val = (current.makespan() + 
+                    w_cap * current.penalty_cap(inst) + 
+                    w_range * current.penalty_range(inst) + 
+                    w_tw * current.penalty_tw(inst))
+    
+    tabu = TabuSet()
+    history = [best.makespan()]
+    
+    no_improve = 0
+    feasible_counter = 0
+    infeasible_counter = 0
+    
+    for it in range(1, cfg.max_iter + 1):
+        if no_improve >= cfg.max_no_improve:
+            if cfg.verbose: print(f"  -> Dừng sớm tại vòng lặp {it} do không cải thiện.")
             break
-
-        # Chấp nhận bước đi tốt nhất vùng lặp
-        current_sol = best_neighbor_sol
-        tabu_list.add('relocate', chosen_move_attr[0], chosen_move_attr[1], iteration, cfg.tabu_tenure)
-
-        # ── CƠ CHẾ PHẠT ĐỘNG THÍCH NGHI (Strategic Oscillation) ──
-        is_current_feasible = len(current_sol.truck_routes) <= inst.num_trucks and current_sol.is_feasible(inst)
-        if not is_current_feasible:
-            penalty_factor *= 1.1  # Nghiệm vi phạm xe tải phụ -> Tăng phạt để ép thu gọn tuyến
-            no_improve += 1
-        else:
-            penalty_factor *= 0.95 # Nghiệm hoàn toàn sạch -> Giảm phạt để mở rộng tìm kiếm không gian biên
             
-            current_actual_obj = current_sol.makespan()
-            if current_actual_obj < best_obj:
-                best_sol = current_sol.copy()
-                best_obj = current_actual_obj
+        # Gọi cấu trúc lân cận Ruin & Recreate để tìm kiếm bước nhảy lớn
+        nb_sol, nb_obj, _ = ruin_and_recreate_neighborhood(
+            current, inst, tabu, it, best_obj_val, w_cap, w_range, w_tw
+        )
+        
+        if nb_sol is None:
+            break
+            
+        # Loại bỏ các trip rỗng thừa thãi phát sinh trong quá trình xáo trộn
+        for v in nb_sol.trucks + nb_sol.drones:
+            v.trips = [t for t in v.trips if len(t.customers()) > 0]
+            if not v.trips:
+                v.trips = [Trip(sequence=[0, 0], is_drone=v.is_drone)]
+            precompute_vehicle(v, inst)
+            
+        current = nb_sol
+        
+        # --- Cơ chế Phạt Động (Strategic Oscillation) ---
+        if current.is_feasible(inst):
+            feasible_counter += 1
+            infeasible_counter = 0
+            if feasible_counter >= 8:
+                # Nghiệm liên tục khả thi tốt -> giảm phạt để tối ưu hóa mạnh hơn Makespan
+                w_cap = max(10.0, w_cap * 0.8)
+                w_range = max(10.0, w_range * 0.8)
+                w_tw = max(10.0, w_tw * 0.8)
+                feasible_counter = 0
+        else:
+            infeasible_counter += 1
+            feasible_counter = 0
+            if infeasible_counter >= 5:
+                # Nghiệm liên tục bị vi phạm -> siết chặt phạt để ép về vùng khả thi
+                w_cap = min(1000.0, w_cap * 1.5)
+                w_range = min(1000.0, w_range * 1.5)
+                w_tw = min(1000.0, w_tw * 1.5)
+                infeasible_counter = 0
+                
+        # Tính toán lại hàm mục tiêu thực tế không phạt để so sánh lưu trữ nghiệm tốt nhất
+        if current.is_feasible(inst) and current.all_served(inst):
+            if current.makespan() < best.makespan() or not best.is_feasible(inst):
+                best = current.copy()
                 no_improve = 0
+                history.append(best.makespan())
+                if cfg.verbose:
+                    print(f"  [{it:4d}] ⭐ CẬP NHẬT TỐT NHẤT: Makespan={best.makespan():.2f} | Mọi khách đã được phục vụ.")
+            else:
+                no_improve += 1
+        else:
+            no_improve += 1
+            
+        if cfg.verbose and it % 50 == 0:
+            print(f"  [{it:4d}] Giám sát hiện tại -> Makespan={current.makespan():.2f} | Feasible={current.is_feasible(inst)} | Trọng số phạt TW={w_tw:.1f}")
+            
+    return best, history
 
-        if cfg.verbose and iteration % 20 == 0:
-            print(f"Iteration {iteration:3d} | Best Makespan: {best_sol.makespan():.2f} | Tuyến hiện tại: {len(current_sol.truck_routes)} (Mục tiêu: {inst.num_trucks})")
-
-    # Cắt tỉa các tuyến rỗng dư thừa trước khi trả về nghiệm cuối cùng
-    best_sol.truck_routes = [r for r in best_sol.truck_routes if len(r.sequence) > 2]
-    while len(best_sol.truck_routes) < inst.num_trucks:
-        r = Route(sequence=[0, 0], is_drone=False)
-        precompute(r, inst)
-        best_sol.truck_routes.append(r)
-
-    return best_sol
+def _drone_eligible(c: Customer, inst: Instance) -> bool:
+    if c.is_c1: return False
+    if c.demand > inst.drone_capacity: return False
+    rt = inst.travel_time(0, c.id, True) + inst.travel_time(c.id, 0, True)
+    return rt <= inst.drone_range

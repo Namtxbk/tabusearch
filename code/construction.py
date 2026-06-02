@@ -1,217 +1,113 @@
 """
-construction.py — Greedy Construction heuristic cho MVRPD-TW
-
-Thuật toán:
-  1. Phân loại C2 → drone-candidate hoặc truck-pool
-  2. Xây route bằng Nearest Neighbor có Time Window
-     (hàm điểm: alpha*dist + beta*wait + gamma*urgency)
-  3. Mở route mới nếu không thể chèn thêm khách nào
+construction.py — Khởi tạo tham lam (Greedy Insertion) cho MVRPD-TW Multi-Trip
 """
-
 from __future__ import annotations
-import math
-import random
-from typing import List, Set, Dict
+from instance import Instance
+from solution import Trip, Vehicle, Solution, precompute_trip, precompute_vehicle
 
-from instance import Instance, Customer
-from solution import Route, Solution, precompute
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Kiểm tra drone-eligible
-# ─────────────────────────────────────────────────────────────────────────────
-
-def is_drone_eligible(cust: Customer, inst: Instance) -> bool:
-    """
-    Khách hàng c có thể phục vụ bằng drone hay không.
-    Điều kiện:
-      - c ∈ C2 (không phải C1)
-      - demand ≤ drone_capacity
-      - dist(depot, c) + dist(c, depot) ≤ drone_range
-    """
-    if cust.is_c1:
+def _trip_feasible(trip: Trip, inst: Instance, is_drone: bool) -> bool:
+    """Kiểm tra chuyến đi có hợp lệ toàn diện hay không."""
+    # 1. Kiểm tra tải trọng
+    cap = inst.drone_capacity if is_drone else inst.truck_capacity
+    if trip.total_load > cap:
         return False
-    if cust.demand > inst.drone_capacity:
-        return False
-    round_trip = inst.dist(0, cust.id) + inst.dist(cust.id, 0)
-    return round_trip <= inst.drone_range
+        
+    # 2. Kiểm tra Time Windows (Không đến trễ)
+    cdata = {c.id: c for c in inst.all_nodes}
+    for i, nid in enumerate(trip.sequence):
+        if nid != 0 and trip.a[i] > cdata[nid].due:
+            return False
+            
+    # 3. Kiểm tra Giới hạn Pin của Drone (Tính bằng thời gian bay)
+    if is_drone:
+        seq = trip.sequence
+        flight_time = sum(inst.travel_time(seq[i], seq[i+1], True) for i in range(len(seq)-1))
+        if flight_time > inst.drone_range:
+            return False
+            
+    return True
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Nearest Neighbor với Time Window
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _score(current_node: int, candidate: Customer,
-           current_time: float, inst: Instance,
-           is_drone: bool,
-           alpha: float = 0.5, beta: float = 0.3, gamma: float = 0.2) -> float:
+def build_initial_solution(inst: Instance) -> Solution:
     """
-    Hàm điểm tham lam (càng nhỏ càng tốt):
-      alpha * dist + beta * wait_time + gamma * urgency
+    Chiến lược Gom tuyến:
+    - Sắp xếp khách hàng theo giờ đóng cửa (Due) để ưu tiên giao trước.
+    - Cố gắng chèn khách vào chuyến hiện tại của xe.
+    - Nếu vi phạm (tải trọng/giờ/pin), tạo chuyến đi mới nối tiếp chuyến cũ.
     """
-    t_travel  = inst.travel_time(current_node, candidate.id, is_drone=is_drone)
-    arrive    = current_time + t_travel
-    wait      = max(0.0, candidate.ready - arrive)
-    slack     = candidate.due - max(arrive, candidate.ready)
-    urgency   = 1.0 / (slack + 1e-6)
-    dist_     = inst.dist(current_node, candidate.id)
-    return alpha * dist_ + beta * wait + gamma * urgency
-
-
-def _build_route(pool: List[Customer], is_drone: bool,
-                 inst: Instance,
-                 alpha: float, beta: float, gamma: float) -> List[Route]:
-    """
-    Xây tập route cho một loại phương tiện (truck hoặc drone)
-    từ danh sách khách hàng pool.
-    Trả về list Route (mỗi route có thể rỗng nếu pool rỗng).
-    """
-    remaining = list(pool)
-    routes: List[Route] = []
-
-    capacity = inst.drone_capacity if is_drone else inst.truck_capacity
-
-    while remaining:
-        seq   = [0]
-        load  = 0.0
-        t     = inst.depot.ready
-
-        while True:
-            current = seq[-1]
-            # Lọc khách khả thi
-            feasible = []
-            for c in remaining:
-                t_travel = inst.travel_time(current, c.id, is_drone=is_drone)
-                arrive   = t + t_travel
-                if arrive > c.due:
-                    continue   # đến muộn → vi phạm TW
-                if load + c.demand > capacity:
-                    continue   # vượt tải trọng
-                # Drone: kiểm tra range nếu quay về depot sau node này
-                if is_drone:
-                    # Quãng đường từ đây đến c rồi về depot
-                    dist_so_far = sum(
-                        inst.dist(seq[k], seq[k+1]) for k in range(len(seq)-1)
-                    )
-                    dist_add = inst.dist(current, c.id) + inst.dist(c.id, 0)
-                    if dist_so_far + dist_add > inst.drone_range:
-                        continue
-                feasible.append(c)
-
-            if not feasible:
+    sorted_customers = sorted(inst.customers, key=lambda c: c.due)
+    
+    trucks = [Vehicle(is_drone=False) for _ in range(inst.num_trucks)]
+    drones = [Vehicle(is_drone=True) for _ in range(inst.num_drones)]
+    
+    # Khởi tạo chuyến rỗng đầu tiên cho mọi phương tiện
+    for v in trucks + drones:
+        t = Trip(sequence=[0, 0], is_drone=v.is_drone)
+        precompute_trip(t, inst)
+        v.trips.append(t)
+        
+    for c in sorted_customers:
+        inserted = False
+        
+        # 1. Thử ưu tiên chèn vào nhóm Drone
+        if not c.is_c1 and c.demand <= inst.drone_capacity:
+            for v in drones:
+                last_trip = v.trips[-1]
+                # Thử nhét khách vào ngay trước khi quay về Depot
+                last_trip.sequence.insert(-1, c.id)
+                precompute_trip(last_trip, inst)
+                
+                if _trip_feasible(last_trip, inst, True):
+                    inserted = True  # Nhét thành công, xe đi tiếp
+                    break
+                else:
+                    # Rút khách ra (Hoàn tác)
+                    last_trip.sequence.pop(-2)
+                    precompute_trip(last_trip, inst)
+                    
+                    # Thử tạo Trip mới xuất phát ngay sau khi Trip cũ quay về Depot
+                    new_trip = Trip(sequence=[0, c.id, 0], is_drone=True, start_time=last_trip.return_time)
+                    precompute_trip(new_trip, inst)
+                    if _trip_feasible(new_trip, inst, True):
+                        v.trips.append(new_trip)
+                        inserted = True
+                        break
+                        
+        if inserted: continue
+        
+        # 2. Thử chèn vào nhóm Truck (Tương tự logic Drone)
+        for v in trucks:
+            last_trip = v.trips[-1]
+            last_trip.sequence.insert(-1, c.id)
+            precompute_trip(last_trip, inst)
+            
+            if _trip_feasible(last_trip, inst, False):
+                inserted = True
                 break
+            else:
+                last_trip.sequence.pop(-2)
+                precompute_trip(last_trip, inst)
+                
+                new_trip = Trip(sequence=[0, c.id, 0], is_drone=False, start_time=last_trip.return_time)
+                precompute_trip(new_trip, inst)
+                if _trip_feasible(new_trip, inst, False):
+                    v.trips.append(new_trip)
+                    inserted = True
+                    break
+                    
+        # 3. An toàn: Nếu mọi cách đều vi phạm (do dữ liệu siêu gắt), 
+        # ép nó vào 1 chuyến mới của Truck để Tabu Search xử lý phạt sau.
+        if not inserted:
+            v = trucks[0]
+            new_trip = Trip(sequence=[0, c.id, 0], is_drone=False, start_time=v.trips[-1].return_time)
+            precompute_trip(new_trip, inst)
+            v.trips.append(new_trip)
 
-            # Chọn khách tốt nhất theo hàm điểm
-            best = min(feasible,
-                       key=lambda c: _score(current, c, t, inst, is_drone,
-                                            alpha, beta, gamma))
-            t_travel = inst.travel_time(current, best.id, is_drone=is_drone)
-            t = max(t + t_travel, best.ready) + best.service
-            load += best.demand
-            seq.append(best.id)
-            remaining.remove(best)
+    # Dọn dẹp các chuyến rỗng (nếu có)
+    for v in trucks + drones:
+        v.trips = [t for t in v.trips if len(t.sequence) > 2]
+        if not v.trips:
+            v.trips = [Trip(sequence=[0, 0], is_drone=v.is_drone)]
+        precompute_vehicle(v, inst)
 
-        seq.append(0)
-        r = Route(sequence=seq, is_drone=is_drone)
-        precompute(r, inst)
-        routes.append(r)
-
-        if not remaining:
-            break
-
-    return routes
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Construction chính
-# ─────────────────────────────────────────────────────────────────────────────
-
-def greedy_construction(inst: Instance,
-                        alpha: float = 0.5,
-                        beta: float  = 0.3,
-                        gamma: float = 0.2) -> Solution:
-    """
-    Xây nghiệm khởi tạo bằng Nearest Neighbor có TW.
-
-    Bước 1: Phân công phương tiện cho C2.
-    Bước 2: Xây routes cho drone (từ drone_pool).
-    Bước 3: Xây routes cho truck (C1 + C2 còn lại).
-    Bước 4: Đảm bảo đủ K truck routes và D drone routes.
-    """
-    # ── Bước 1: Phân loại ────────────────────────────────────────────────
-    truck_pool: List[Customer] = []
-    drone_pool: List[Customer] = []
-
-    for c in inst.customers:
-        if is_drone_eligible(c, inst):
-            drone_pool.append(c)
-        else:
-            # C1 hoặc C2 không đủ điều kiện drone → truck
-            truck_pool.append(c)
-
-    # ── Bước 2: Xây drone routes ─────────────────────────────────────────
-    drone_routes_raw = _build_route(drone_pool, is_drone=True,
-                                    inst=inst,
-                                    alpha=alpha, beta=beta, gamma=gamma)
-
-    # Giới hạn số drone routes = D
-    # Nếu quá nhiều route → gộp vào truck
-    while len(drone_routes_raw) > inst.num_drones:
-        overflow = drone_routes_raw.pop()
-        # Khách từ route thừa → chuyển về truck_pool
-        truck_pool.extend(
-            inst.customers[nid - 1] for nid in overflow.customers()
-            if nid - 1 < len(inst.customers)
-        )
-        # Tìm đúng Customer object
-        overflow_custs = [c for c in inst.customers
-                          if c.id in overflow.customers()]
-        truck_pool.extend(overflow_custs)
-        # Tránh duplicate
-        seen = set()
-        truck_pool_dedup = []
-        for c in truck_pool:
-            if c.id not in seen:
-                seen.add(c.id)
-                truck_pool_dedup.append(c)
-        truck_pool = truck_pool_dedup
-
-    # Padding drone routes rỗng nếu chưa đủ D
-    while len(drone_routes_raw) < inst.num_drones:
-        r = Route(sequence=[0, 0], is_drone=True)
-        precompute(r, inst)
-        drone_routes_raw.append(r)
-
-    # ── Bước 3: Xây truck routes ─────────────────────────────────────────
-    truck_routes_raw = _build_route(truck_pool, is_drone=False,
-                                    inst=inst,
-                                    alpha=alpha, beta=beta, gamma=gamma)
-
-    # Giới hạn số truck routes = K
-    while len(truck_routes_raw) > inst.num_trucks:
-        # Nếu vượt → thêm route cuối vào route đầu tiên còn capacity
-        overflow = truck_routes_raw.pop()
-        merged   = False
-        for r in truck_routes_raw:
-            if r.total_load + overflow.total_load <= inst.truck_capacity:
-                # Thêm khách của overflow vào cuối r (trước depot cuối)
-                r.sequence = r.sequence[:-1] + overflow.sequence[1:]
-                precompute(r, inst)
-                merged = True
-                break
-        if not merged:
-            # Không gộp được → giữ lại (vi phạm sẽ bị xử lý bởi penalty)
-            truck_routes_raw.append(overflow)
-            break
-
-    # Padding truck routes rỗng nếu chưa đủ K
-    while len(truck_routes_raw) < inst.num_trucks:
-        r = Route(sequence=[0, 0], is_drone=False)
-        precompute(r, inst)
-        truck_routes_raw.append(r)
-
-    sol = Solution(
-        truck_routes=truck_routes_raw[:inst.num_trucks],
-        drone_routes=drone_routes_raw[:inst.num_drones],
-    )
+    sol = Solution(trucks=trucks, drones=drones)
     return sol
