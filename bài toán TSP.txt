@@ -10,3 +10,4 @@ Lời giải ban đầu
 bài 1 : xử lý time windown 
 - lưu them thong tin bo tro 
 - kiem tra rang buoc cac anh huong do toi rb thời gian 
+= python main.py
