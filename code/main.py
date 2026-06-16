@@ -9,6 +9,7 @@ from tabu_search import advanced_tabu_search, TabuSearchConfig
 # Điền tên file JSON muốn test vào đây
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_FILES = [
+    "6.10.1.json",
     "20.10.1.json",
     "20.10.3.json",
 ]
