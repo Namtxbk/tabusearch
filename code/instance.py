@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Set
 
-L_W = 60.0  # Service time cố định cho tất cả khách hàng (phút)
+L_W = 0.0  # Service time cố định cho tất cả khách hàng (phút)
 
 @dataclass
 class Customer:
