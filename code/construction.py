@@ -160,67 +160,47 @@ def build_initial_solution(inst: Instance) -> Solution:
                 inserted = True
                 break
 
-        # ── Fallback: chọn vị trí gây vi phạm TW ÍT NHẤT trong số mọi
-        # truck/mọi trip/mọi vị trí chèn có thể (không chỉ ép cứng vào
-        # cuối truck[0] như trước). Vẫn để tabu search xử lý phạt còn lại,
-        # nhưng điểm khởi đầu sẽ tốt hơn nhiều, đỡ gánh nặng cho tabu.
+        # ── Fallback: ĐẢM BẢO TW-FEASIBLE TUYỆT ĐỐI ────────────────────
+        # Theo yêu cầu mới: construction phải LUÔN trả về nghiệm không vi
+        # phạm time window. Vì multi-trip là tuần tự (1 xe không thể đi 2
+        # trip cùng lúc), cách duy nhất khả thi khi mọi phương tiện hiện có
+        # đều không kịp giờ là MỞ THÊM 1 PHƯƠNG TIỆN ẢO mới (rảnh từ thời
+        # điểm 0). Ưu tiên thử drone ảo trước (nhất quán với thứ tự ưu tiên
+        # drone > truck ở Bước 1/2, và vì drone thường nhanh hơn — có thể là
+        # lựa chọn khả thi DUY NHẤT khi truck không kịp dù xuất phát ngay từ
+        # đầu, ví dụ do khoảng cách quá xa so với due). Số phương tiện ảo
+        # thêm được đếm và báo cáo riêng ở cuối hàm, không giấu đi.
         if not inserted:
-            fb_best_viol = float('inf')
-            fb_best_v = None
-            fb_best_ti = None
-            fb_best_pos = None
-            fb_best_open_new = False
+            drone_can_try = (not c.is_c1 and c.demand <= inst.drone_capacity and
+                              (inst.travel_time(0, c.id, True) + inst.travel_time(c.id, 0, True))
+                              <= inst.drone_range)
+            if drone_can_try:
+                extra_d = Vehicle(is_drone=True)
+                extra_trip = Trip(sequence=[0, c.id, 0], is_drone=True, start_time=0.0)
+                precompute_trip(extra_trip, inst)
+                if _trip_feasible(extra_trip, inst, True):
+                    extra_d.trips.append(extra_trip)
+                    drones.append(extra_d)
+                    inserted = True
 
-            for v in trucks:
-                for ti, trip in enumerate(v.trips):
-                    for pos in range(1, len(trip.sequence)):
-                        trip.sequence.insert(pos, c.id)
-                        precompute_trip(trip, inst)
-                        # Bỏ qua nếu vi phạm tải (vẫn phải hợp lệ về capacity)
-                        if trip.total_load <= inst.truck_capacity + 1e-9:
-                            viol = _trip_tw_violation(trip, inst)
-                            if viol < fb_best_viol:
-                                fb_best_viol = viol
-                                fb_best_v, fb_best_ti, fb_best_pos = v, ti, pos
-                                fb_best_open_new = False
-                        trip.sequence.pop(pos)
-                        precompute_trip(trip, inst)
-
-                # Phương án mở trip mới cho xe này
-                new_trip = Trip(
-                    sequence=[0, c.id, 0],
-                    is_drone=False,
-                    start_time=v.trips[-1].return_time
+        if not inserted:
+            extra_v = Vehicle(is_drone=False)
+            extra_trip = Trip(sequence=[0, c.id, 0], is_drone=False, start_time=0.0)
+            precompute_trip(extra_trip, inst)
+            if not _trip_feasible(extra_trip, inst, False):
+                # Cực hiếm: ngay cả 1 phương tiện rảnh từ đầu, đi thẳng đến
+                # khách này cũng không kịp do due quá sớm so với khoảng cách
+                # từ depot. Đây là giới hạn vật lý của instance, không phải
+                # lỗi thuật toán.
+                raise ValueError(
+                    f"Khách hàng id={c.id} (due={c.due:.2f}) không thể phục vụ "
+                    f"đúng hạn bởi BẤT KỲ phương tiện nào, kể cả phương tiện "
+                    f"rảnh từ thời điểm 0 đi thẳng từ depot (instance vật lý "
+                    f"không thể feasible với khách này)."
                 )
-                precompute_trip(new_trip, inst)
-                if new_trip.total_load <= inst.truck_capacity + 1e-9:
-                    viol = _trip_tw_violation(new_trip, inst)
-                    if viol < fb_best_viol:
-                        fb_best_viol = viol
-                        fb_best_v, fb_best_ti, fb_best_pos = v, None, None
-                        fb_best_open_new = True
-
-            if fb_best_open_new:
-                new_trip = Trip(
-                    sequence=[0, c.id, 0],
-                    is_drone=False,
-                    start_time=fb_best_v.trips[-1].return_time
-                )
-                precompute_trip(new_trip, inst)
-                fb_best_v.trips.append(new_trip)
-            elif fb_best_v is not None:
-                fb_best_v.trips[fb_best_ti].sequence.insert(fb_best_pos, c.id)
-                precompute_trip(fb_best_v.trips[fb_best_ti], inst)
-            else:
-                # Trường hợp cực hiếm (vd. capacity quá nhỏ): giữ hành vi cũ
-                v0 = trucks[0]
-                fb_trip = Trip(
-                    sequence=[0, c.id, 0],
-                    is_drone=False,
-                    start_time=v0.trips[-1].return_time
-                )
-                precompute_trip(fb_trip, inst)
-                v0.trips.append(fb_trip)
+            extra_v.trips.append(extra_trip)
+            trucks.append(extra_v)
+            inserted = True
 
     # Dọn trip rỗng và precompute lại toàn bộ
     for v in trucks + drones:
@@ -229,4 +209,13 @@ def build_initial_solution(inst: Instance) -> Solution:
             v.trips = [Trip(sequence=[0, 0], is_drone=v.is_drone)]
         precompute_vehicle(v, inst)
 
-    return Solution(trucks=trucks, drones=drones)
+    sol = Solution(trucks=trucks, drones=drones)
+    # Báo cáo minh bạch số truck VƯỢT ĐỊNH (inst.num_trucks) đã phải mở
+    # thêm để đảm bảo TW-feasible tuyệt đối. Đây không phải số truck thật
+    # sẽ dùng trong vận hành — là chỉ số cho biết instance "khó" tới mức
+    # nào với số xe ban đầu. Gắn làm attribute thay vì đổi signature hàm,
+    # để không phá vỡ các nơi khác (tabu_search.py, main.py, ...) đang gọi
+    # build_initial_solution(inst) và chỉ mong nhận về 1 Solution.
+    sol.extra_trucks_used = max(0, len(trucks) - inst.num_trucks)
+    sol.extra_drones_used = max(0, len(drones) - inst.num_drones)
+    return sol

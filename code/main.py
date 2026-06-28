@@ -9,8 +9,8 @@ from tabu_search import advanced_tabu_search, TabuSearchConfig
 # Điền tên file JSON muốn test vào đây
 # ─────────────────────────────────────────────────────────────────────────────
 TEST_FILES = [
-    "50.10.1.json",
-    "50.10.2.json",
+    "10.10.1.json",
+    "10.10.2.json",
 ]
 
 DATA_DIR = "WithTimeWindows"

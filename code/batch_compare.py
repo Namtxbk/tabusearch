@@ -118,7 +118,7 @@ def main():
     ap.add_argument('--max_iter',        type=int,   default=2000)
     ap.add_argument('--max_no_improve',  type=int,   default=300)
     ap.add_argument('--tenure_base',     type=int,   default=7)
-    ap.add_argument('--time_limit',      type=float, default=120.0)
+    ap.add_argument('--time_limit',      type=float, default=300.0)
     ap.add_argument('--verbose', action='store_true')
     args = ap.parse_args()
 
