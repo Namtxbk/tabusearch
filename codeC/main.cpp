@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Đọc baseline
-    std::cout << "Đang đọc baseline từ: " << baseline_path << "\n";
+    std::cout << "Dang doc baseline tu : " << baseline_path << "\n";
     auto baseline = load_baseline(baseline_path);
     std::cout << "  -> Tìm thấy " << baseline.size() << " instance trong baseline.\n\n";
 
