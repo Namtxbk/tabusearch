@@ -4,7 +4,9 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Set
 
-L_W = 0.0  # Service time cố định cho tất cả khách hàng (phút)
+L_W = 0.0    # Service time tại điểm khách = 0 (bốc/dỡ tức thì)
+L_W_MAX = 60.0  # Thời gian chờ tối đa của xe tại điểm khách (phút)
+               # Ràng buộc: wait_i = max(0, e_i - arrive_i) <= L_W_MAX
 
 @dataclass
 class Customer:
@@ -25,6 +27,7 @@ class Instance:
     truck_capacity: float
     drone_capacity: float
     drone_range: float
+    max_wait: float = L_W_MAX  # Thời gian chờ tối đa tại điểm khách (L_w)
     truck_speed: float = 1.0
     drone_speed: float = 1.5
     depot: Customer = None
@@ -140,6 +143,7 @@ def read_json_instance(filepath: str) -> Instance:
 
     inst = Instance(
         name           = instance_name,
+        max_wait       = L_W_MAX,
         num_trucks     = num_trucks,
         num_drones     = num_drones,
         truck_capacity = truck_capacity,

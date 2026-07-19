@@ -58,30 +58,19 @@ class TabuSet:
 
 def _obj(sol: Solution, inst: Instance,
          w_tw: float, w_cap: float, w_range: float, w_assign: float) -> float:
-    # Tương thích với cả phiên bản solution.py có và KHÔNG có
-    # penalty_drone_assign(). Một số phiên bản Solution không định nghĩa
-    # phạt riêng cho việc gán nhầm khách C1 cho drone (vì construction.py
-    # đã chặn việc này ngay từ đầu, nên phạt này luôn = 0 trong thực tế).
     assign_penalty = (sol.penalty_drone_assign(inst)
                        if hasattr(sol, 'penalty_drone_assign') else 0.0)
-    cap_pen = sol.penalty_cap(inst)
+    cap_pen   = sol.penalty_cap(inst)
     range_pen = sol.penalty_range(inst)
-    tw_pen = sol.penalty_tw(inst)
+    tw_pen    = sol.penalty_tw(inst)
+    # Ràng buộc L_w: thời gian chờ tối đa tại điểm khách.
+    # Xử lý như ràng buộc CỨNG (hard penalty 1e6) — cùng nhóm với TW/cap/range
+    # vì construction.py đã đảm bảo lời giải khởi đầu feasible về L_w, nên
+    # mọi move tạo ra vi phạm L_w đều phải "đắt" hơn bất kỳ lợi ích makespan.
+    wait_pen  = sol.penalty_wait(inst) if hasattr(sol, 'penalty_wait') else 0.0
 
-    # HARD PENALTY cho tải trọng, tầm bay drone, VÀ TIME WINDOW: từ khi
-    # construction.py được sửa để luôn đảm bảo TW-feasible tuyệt đối ngay
-    # từ điểm khởi tạo (bằng cách mượn thêm phương tiện ảo khi cần — xem
-    # extra_trucks_used/extra_drones_used), time window trở thành ràng buộc
-    # CỨNG giống tải trọng/tầm bay, không còn là ràng buộc mềm cần "dò đường
-    # qua vùng infeasible" như trước. Do đó mọi vi phạm TW cũng phải luôn
-    # "đắt" hơn bất kỳ lợi ích makespan nào — dùng hệ số rất lớn, độc lập
-    # với w_tw (vốn dùng cho strategic oscillation, không phù hợp làm rào
-    # chắn cứng). Move vi phạm TW vẫn được sinh ra (không bị loại bỏ hoàn
-    # toàn) để tránh thuật toán "kẹt cứng" khi 5 toán tử khai thác không
-    # tìm được move nào feasible ở 1 vài vòng lặp hiếm — nhưng do điểm rất
-    # cao, nó chỉ được chọn khi thực sự không còn lựa chọn nào khác.
     HARD_CAP_MULT = 1e6
-    hard_penalty = HARD_CAP_MULT * (cap_pen + range_pen + tw_pen)
+    hard_penalty = HARD_CAP_MULT * (cap_pen + range_pen + tw_pen + wait_pen)
 
     return (sol.makespan()
             + w_cap    * cap_pen
@@ -488,9 +477,11 @@ def _hard_ok(sol: Solution, inst: Instance) -> bool:
     điểm khởi tạo (mượn thêm phương tiện ảo khi cần), time window được coi
     là ràng buộc vật lý cứng giống tải trọng/tầm bay, không còn là ràng
     buộc mềm cần "dò đường qua vùng infeasible" như thiết kế trước đây."""
-    return (sol.penalty_cap(inst) <= 1e-9
+    wait_pen = sol.penalty_wait(inst) if hasattr(sol, 'penalty_wait') else 0.0
+    return (sol.penalty_cap(inst)   <= 1e-9
             and sol.penalty_range(inst) <= 1e-9
-            and sol.penalty_tw(inst) <= 1e-9)
+            and sol.penalty_tw(inst)    <= 1e-9
+            and wait_pen                <= 1e-9)
 
 
 def _better_overall(cand: Solution, cand_obj: float, cand_hard_ok: bool,

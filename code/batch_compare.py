@@ -75,6 +75,34 @@ def load_baseline(csv_path: str) -> dict:
 # Chạy thuật toán trên 1 file instance
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _format_routes(sol) -> tuple:
+    """
+    Format routes theo đúng định dạng baseline:
+      Truck paths: [[[0,6,9,10,4,5,1,0]]]          ← list trucks → list trips → nodes
+      Drone paths: [[[0,2,0],[0,8,3,0],[0,7,0]]]   ← list drones → list trips → nodes
+      Truck working time: [1735.95]                 ← return_time cuối của mỗi truck
+      Drone working time: [1691.21]                 ← return_time cuối của mỗi drone
+    """
+    truck_paths = []
+    for v in sol.trucks:
+        trips = [t.sequence for t in v.trips if len(t.sequence) > 2]
+        if trips:
+            truck_paths.append(trips)
+
+    drone_paths = []
+    for v in sol.drones:
+        trips = [t.sequence for t in v.trips if len(t.sequence) > 2]
+        if trips:
+            drone_paths.append(trips)
+
+    truck_times = [round(v.finish_time(), 4) for v in sol.trucks
+                   if any(len(t.sequence) > 2 for t in v.trips)]
+    drone_times = [round(v.finish_time(), 4) for v in sol.drones
+                   if any(len(t.sequence) > 2 for t in v.trips)]
+
+    return truck_paths, drone_paths, truck_times, drone_times
+
+
 def run_one(filepath: str, cfg: TabuSearchConfig) -> dict:
     name = os.path.splitext(os.path.basename(filepath))[0]
 
@@ -88,6 +116,8 @@ def run_one(filepath: str, cfg: TabuSearchConfig) -> dict:
     best_sol, history = advanced_tabu_search(init_sol, inst, cfg)
     t_ts = time.time() - t0
 
+    truck_paths, drone_paths, truck_times, drone_times = _format_routes(best_sol)
+
     return {
         'Problem':          name,
         'Makespan_algo':    round(best_sol.makespan(), 4),
@@ -98,6 +128,12 @@ def run_one(filepath: str, cfg: TabuSearchConfig) -> dict:
         'Penalty_TW':       round(best_sol.penalty_tw(inst), 4),
         'Penalty_Cap':      round(best_sol.penalty_cap(inst), 4),
         'Penalty_Range':    round(best_sol.penalty_range(inst), 4),
+        'Penalty_Wait':     round(best_sol.penalty_wait(inst), 4),
+        # Routes theo định dạng baseline
+        'Truck_paths':      str(truck_paths),
+        'Drone_paths':      str(drone_paths),
+        'Truck_working_time': str(truck_times),
+        'Drone_working_time': str(drone_times),
     }
 
 
@@ -118,7 +154,7 @@ def main():
     ap.add_argument('--max_iter',        type=int,   default=2000)
     ap.add_argument('--max_no_improve',  type=int,   default=300)
     ap.add_argument('--tenure_base',     type=int,   default=7)
-    ap.add_argument('--time_limit',      type=float, default=300.0)
+    ap.add_argument('--time_limit',      type=float, default=120.0)
     ap.add_argument('--verbose', action='store_true')
     args = ap.parse_args()
 
@@ -169,6 +205,7 @@ def main():
                 'Penalty_TW': '',
                 'Penalty_Cap': '',
                 'Penalty_Range': '',
+                'Penalty_Wait': '',
             })
             continue
 
@@ -183,6 +220,13 @@ def main():
         print(f"Makespan={ms_algo:.2f}  Baseline={ms_base if ms_base else 'N/A'}  "
               f"Gap={gap:.2f}%" if gap != '' else f"Makespan={ms_algo:.2f}  Baseline=N/A")
 
+        # In routes theo định dạng baseline để theo dõi kết quả
+        print(f"  Truck paths : {result['Truck_paths']}")
+        print(f"  Drone paths : {result['Drone_paths']}")
+        print(f"  Truck time  : {result['Truck_working_time']}")
+        print(f"  Drone time  : {result['Drone_working_time']}")
+        print(f"  Feasible={result['Feasible']}  TW={result['Penalty_TW']}  Cap={result['Penalty_Cap']}  Range={result['Penalty_Range']}  Wait={result['Penalty_Wait']}")
+
         rows.append({
             'Problem':          problem_name,
             'Makespan_baseline': round(ms_base, 4) if ms_base is not None else '',
@@ -195,12 +239,18 @@ def main():
             'Penalty_TW':       result['Penalty_TW'],
             'Penalty_Cap':      result['Penalty_Cap'],
             'Penalty_Range':    result['Penalty_Range'],
+            'Penalty_Wait':     result['Penalty_Wait'],
+            'Truck_paths':      result['Truck_paths'],
+            'Drone_paths':      result['Drone_paths'],
+            'Truck_working_time': result['Truck_working_time'],
+            'Drone_working_time': result['Drone_working_time'],
         })
 
     # Ghi file kết quả
     fieldnames = ['Problem', 'Makespan_baseline', 'Makespan_algo', 'Gap_%',
                   'Feasible', 'AllServed', 'Construction_s', 'TS_s',
-                  'Penalty_TW', 'Penalty_Cap', 'Penalty_Range']
+                  'Penalty_TW', 'Penalty_Cap', 'Penalty_Range', 'Penalty_Wait',
+                  'Truck_paths', 'Drone_paths', 'Truck_working_time', 'Drone_working_time']
 
     with open(args.output, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)

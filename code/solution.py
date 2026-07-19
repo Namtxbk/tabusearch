@@ -220,17 +220,46 @@ class Solution:
             flight_time = sum(inst.travel_time(seq[i], seq[i+1], is_drone=True) for i in range(len(seq)-1))
             total += max(0.0, flight_time - inst.drone_range)
         return total
-    
+
+    def penalty_wait(self, inst: Instance) -> float:
+        """Phạt vi phạm ràng buộc L_w: thời gian chờ của xe tại điểm khách
+        không được vượt quá inst.max_wait (= L_w = 60 phút).
+
+        Thời gian chờ tại điểm i:
+            wait_i = max(0, e_i - arrive_i)
+        trong đó arrive_i = a[i-1] + travel(i-1, i) (trước khi đợi).
+        Ràng buộc: wait_i <= L_w với mọi khách i trong mọi chuyến.
+        """
+        total = 0.0
+        cdata = {c.id: c for c in inst.all_nodes}
+        for trip in self.truck_routes + self.drone_routes:
+            seq = trip.sequence
+            for pos in range(1, len(seq) - 1):  # bỏ depot đầu/cuối
+                nid = seq[pos]
+                if nid == 0:
+                    continue
+                # Tính arrive_i (thời điểm xe thực sự đến, TRƯỚC khi đợi)
+                prev = seq[pos - 1]
+                t_prev_depart = trip.a[pos - 1] + cdata[prev].service
+                arrive_i = t_prev_depart + inst.travel_time(prev, nid, trip.is_drone)
+                # Thời gian chờ = max(0, ready_i - arrive_i)
+                wait_i = max(0.0, cdata[nid].ready - arrive_i)
+                # Vi phạm = phần chờ vượt quá L_w
+                total += max(0.0, wait_i - inst.max_wait)
+        return total
+
     def objective(self, inst: Instance) -> float:
         return (self.makespan()
                 + 50.0  * self.penalty_tw(inst)
                 + 200.0 * self.penalty_cap(inst)
-                + 200.0 * self.penalty_range(inst))
+                + 200.0 * self.penalty_range(inst)
+                + 200.0 * self.penalty_wait(inst))
 
     def is_feasible(self, inst: Instance) -> bool:
-        return (self.penalty_tw(inst) == 0.0
-                and self.penalty_cap(inst) == 0.0
-                and self.penalty_range(inst) == 0.0)
+        return (self.penalty_tw(inst)    == 0.0
+                and self.penalty_cap(inst)   == 0.0
+                and self.penalty_range(inst) == 0.0
+                and self.penalty_wait(inst)  == 0.0)
 
     def all_served(self, inst: Instance) -> bool:
         served = set()
