@@ -273,54 +273,15 @@ class Solution:
 
     def recompute_all(self, inst: Instance):
         """
-        Tính toán lại toàn bộ thông số thời gian, tải trọng của hệ thống xe
-        Đảm bảo tính tuần tự tuyến tính: Trip sau bắt đầu khi trip trước quay về Depot.
+        Tính lại toàn bộ thông số (a[], F[], load, dist, return_time) cho
+        mọi xe và mọi trip, đảm bảo tính tuần tự multi-trip.
+        Đây là hàm DUY NHẤT được gọi sau khi thay đổi sequence bất kỳ.
         """
         for v in self.trucks + self.drones:
-            current_time = 0.0
-            for trip in v.trips:
-                # Trip sau phải đợi trip trước quay về Depot hoàn tất
-                trip.start_time = max(0.0, current_time)
-                
-                # Tính toán chi tiết tải trọng và thời gian đến từng node của trip này
-                load = 0.0
-                dist = 0.0
-                seq = trip.sequence
-                
-                arrival_times = [0.0] * len(seq)
-                arrival_times[0] = trip.start_time
-                
-                t_curr = trip.start_time
-                for i in range(len(seq) - 1):
-                    u, u_next = seq[i], seq[i+1]
-                    
-                    # Cộng dồn tải trọng hàng hóa
-                    if u_next != 0:
-                        cust = inst.customers[u_next - 1]
-                        load += cust.demand
-                        
-                    # Tính toán thời gian di chuyển giữa 2 điểm liên tiếp
-                    dt = inst.travel_time(u, u_next, trip.is_drone)
-                    dist += inst.dist(u, u_next)
-                    
-                    t_arrival = t_curr + dt
-                    arrival_times[i+1] = t_arrival
-                    
-                    # Cộng thêm thời gian phục vụ tại điểm nếu điểm đó là khách hàng
-                    if u_next != 0:
-                        cust = inst.customers[u_next - 1]
-                        t_curr = max(t_arrival, cust.ready) + cust.service
-                    else:
-                        t_curr = t_arrival
-                        
-                trip.total_load = load
-                trip.total_dist = dist
-                trip.return_time = t_curr  # Điểm kết thúc của trip hiện tại
-                
-                # Lưu mốc thời gian quay về làm mốc bắt đầu chuyến kế tiếp (Multi-Trip)
-                current_time = trip.return_time
-                
-            # Đồng bộ hóa dữ liệu tổng quan cho phương tiện
+            v.trips = [t for t in v.trips if len(t.sequence) > 2
+                       or t.sequence == [0, 0]]
+            if not v.trips:
+                v.trips = [Trip(sequence=[0, 0], is_drone=v.is_drone)]
             precompute_vehicle(v, inst)
 
     def summary(self, inst: Instance) -> str:

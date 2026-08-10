@@ -69,8 +69,17 @@ def _obj(sol: Solution, inst: Instance,
     # mọi move tạo ra vi phạm L_w đều phải "đắt" hơn bất kỳ lợi ích makespan.
     wait_pen  = sol.penalty_wait(inst) if hasattr(sol, 'penalty_wait') else 0.0
 
-    HARD_CAP_MULT = 1e6
-    hard_penalty = HARD_CAP_MULT * (cap_pen + range_pen + tw_pen + wait_pen)
+    # Hai mức hard penalty tách biệt:
+    # - Cap và Range: hệ số 1e9 (ràng buộc VẬT LÝ tuyệt đối — xe không thể
+    #   chở vượt tải hay drone không thể bay vượt pin, không có ngoại lệ)
+    # - TW và Wait: hệ số 1e6 (ràng buộc cứng thời gian)
+    # Tách 2 mức vì: khi TW penalty rất lớn, giảm TW không được phép
+    # "mua" quyền vi phạm cap/range dù nhỏ.
+    HARD_PHYSICAL = 1e9   # cap, range
+    HARD_TEMPORAL = 1e6   # tw, wait
+
+    hard_penalty = (HARD_PHYSICAL * (cap_pen + range_pen)
+                  + HARD_TEMPORAL * (tw_pen + wait_pen))
 
     return (sol.makespan()
             + w_cap    * cap_pen

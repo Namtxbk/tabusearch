@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from typing import List, Set
 
 L_W = 0.0    # Service time tại điểm khách = 0 (bốc/dỡ tức thì)
-L_W_MAX = 60.0  # Thời gian chờ tối đa của xe tại điểm khách (phút)
-               # Ràng buộc: wait_i = max(0, e_i - arrive_i) <= L_W_MAX
+L_W_MAX = 3600.0  # Thời gian chờ tối đa của xe tại điểm khách = 60 phút = 3600 giây
+                  # Toàn bộ bài toán dùng đơn vị GIÂY (speed m/s, dist m, time s)
 
 @dataclass
 class Customer:
