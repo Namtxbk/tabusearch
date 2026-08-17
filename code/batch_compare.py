@@ -9,8 +9,7 @@ Cách dùng:
 
     python batch_compare.py --data_dir WithTimeWindows --baseline result.csv --output ket_qua_so_sanh.csv
 
-    python batch_compare.py --data_dir WithTimeWindows --baseline result.csv --output ket_qua_notw.csv --no_tw
-
+a
 Yêu cầu:
     - Các file instance .json đặt trong --data_dir, tên dạng "6.5.1.json", "10.10.1.json", v.v.
     - File baseline CSV có cột "Problem" và "Truck working time" / "Drone working time"
