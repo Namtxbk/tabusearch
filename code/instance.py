@@ -35,6 +35,10 @@ class Instance:
     c1_ids: Set[int] = field(default_factory=set)
     c2_ids: Set[int] = field(default_factory=set)
     _dist: List[List[float]] = field(default_factory=list, repr=False)
+    # Khi ignore_tw=True: bỏ qua hoàn toàn time window và L_w
+    # (xe không chờ, không kiểm tra due, không phạt TW/Wait)
+    # Dùng để so sánh với baseline no-TW
+    ignore_tw: bool = False
 
     def build_dist(self):
         nodes = [self.depot] + self.customers

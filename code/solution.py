@@ -99,7 +99,9 @@ def precompute_trip(trip: Trip, inst: Instance) -> None:
         t_travel = inst.travel_time(prev, curr, is_drone=is_drone)
         s_prev = cdata[prev].service
         arrive = a[i - 1] + s_prev + t_travel
-        a[i] = max(arrive, cdata[curr].ready)
+        # ignore_tw=True: không chờ (đến lúc nào phục vụ luôn lúc đó)
+        # ignore_tw=False: chờ nếu đến sớm hơn ready time
+        a[i] = arrive if inst.ignore_tw else max(arrive, cdata[curr].ready)
 
     # ── Forward Time Slack ────────────────────────────────────────────────
     F = [0.0] * n
@@ -193,6 +195,8 @@ class Solution:
         return max(times) if times else 0.0
 
     def penalty_tw(self, inst: Instance) -> float:
+        if inst.ignore_tw:
+            return 0.0  # bỏ qua TW hoàn toàn
         total = 0.0
         cdata = {c.id: c for c in inst.all_nodes}
         for trip in self.truck_routes + self.drone_routes:
@@ -222,29 +226,20 @@ class Solution:
         return total
 
     def penalty_wait(self, inst: Instance) -> float:
-        """Phạt vi phạm ràng buộc L_w: thời gian chờ của xe tại điểm khách
-        không được vượt quá inst.max_wait (= L_w = 60 phút).
-
-        Thời gian chờ tại điểm i:
-            wait_i = max(0, e_i - arrive_i)
-        trong đó arrive_i = a[i-1] + travel(i-1, i) (trước khi đợi).
-        Ràng buộc: wait_i <= L_w với mọi khách i trong mọi chuyến.
-        """
+        if inst.ignore_tw:
+            return 0.0  # bỏ qua L_w hoàn toàn
         total = 0.0
         cdata = {c.id: c for c in inst.all_nodes}
         for trip in self.truck_routes + self.drone_routes:
             seq = trip.sequence
-            for pos in range(1, len(seq) - 1):  # bỏ depot đầu/cuối
+            for pos in range(1, len(seq) - 1):
                 nid = seq[pos]
                 if nid == 0:
                     continue
-                # Tính arrive_i (thời điểm xe thực sự đến, TRƯỚC khi đợi)
                 prev = seq[pos - 1]
                 t_prev_depart = trip.a[pos - 1] + cdata[prev].service
                 arrive_i = t_prev_depart + inst.travel_time(prev, nid, trip.is_drone)
-                # Thời gian chờ = max(0, ready_i - arrive_i)
                 wait_i = max(0.0, cdata[nid].ready - arrive_i)
-                # Vi phạm = phần chờ vượt quá L_w
                 total += max(0.0, wait_i - inst.max_wait)
         return total
 

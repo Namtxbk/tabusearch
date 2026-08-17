@@ -56,9 +56,10 @@ def _hard_feasible(trip: Trip, inst: Instance, is_drone: bool) -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 def _compute_delta_tw(sol: Solution, inst: Instance) -> float:
     """Tổng vi phạm TW của toàn bộ solution hiện tại.
-    Đây chính là hàm compute ΔTW(a) trong pseudocode:
-        penalty = Σ max(0, t_j - l_j)  với mọi j đã có trong solution
+    Khi ignore_tw=True: luôn trả về 0 (mọi move đều là feasible move).
     """
+    if inst.ignore_tw:
+        return 0.0
     cdata = {c.id: c for c in inst.all_nodes}
     total = 0.0
     for v in sol.trucks + sol.drones:

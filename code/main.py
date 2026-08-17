@@ -19,7 +19,7 @@ CFG = TabuSearchConfig(
     max_iter       = 2000,
     max_no_improve = 300,
     tenure_base    = 7,
-    time_limit     = 120.0,
+    time_limit     = 300.0,
     verbose        = True,
 )
 # ─────────────────────────────────────────────────────────────────────────────

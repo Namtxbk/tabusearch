@@ -9,6 +9,8 @@ Cách dùng:
 
     python batch_compare.py --data_dir WithTimeWindows --baseline result.csv --output ket_qua_so_sanh.csv
 
+    python batch_compare.py --data_dir WithTimeWindows --baseline result.csv --output ket_qua_notw.csv --no_tw
+
 Yêu cầu:
     - Các file instance .json đặt trong --data_dir, tên dạng "6.5.1.json", "10.10.1.json", v.v.
     - File baseline CSV có cột "Problem" và "Truck working time" / "Drone working time"
@@ -103,10 +105,11 @@ def _format_routes(sol) -> tuple:
     return truck_paths, drone_paths, truck_times, drone_times
 
 
-def run_one(filepath: str, cfg: TabuSearchConfig) -> dict:
+def run_one(filepath: str, cfg: TabuSearchConfig, ignore_tw: bool = False) -> dict:
     name = os.path.splitext(os.path.basename(filepath))[0]
 
     inst = read_json_instance(filepath)
+    inst.ignore_tw = ignore_tw  # bật/tắt chế độ không TW
 
     t0 = time.time()
     init_sol = build_initial_solution(inst)
@@ -154,8 +157,10 @@ def main():
     ap.add_argument('--max_iter',        type=int,   default=2000)
     ap.add_argument('--max_no_improve',  type=int,   default=300)
     ap.add_argument('--tenure_base',     type=int,   default=7)
-    ap.add_argument('--time_limit',      type=float, default=120.0)
+    ap.add_argument('--time_limit',      type=float, default=300.0)
     ap.add_argument('--verbose', action='store_true')
+    ap.add_argument('--no_tw', action='store_true',
+                    help='Bỏ qua ràng buộc TW và L_w (để so sánh với baseline no-TW)')
     args = ap.parse_args()
 
     cfg = TabuSearchConfig(
@@ -188,7 +193,7 @@ def main():
 
         print(f"[{idx}/{n_total}] Đang chạy {problem_name} ...", end=' ', flush=True)
         try:
-            result = run_one(fpath, cfg)
+            result = run_one(fpath, cfg, ignore_tw=args.no_tw)
         except Exception as e:
             import traceback
             print(f"LỖI: {e}")
