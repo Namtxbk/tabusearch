@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <vector>
 #include "instance.hpp"
 #include "solution.hpp"
 #include "schedule.hpp"
@@ -38,6 +39,7 @@ inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWei
 
     double VQ = 0.0, VD = 0.0, VTW = 0.0, VW = 0.0;
     double totalDistance = 0.0;
+    std::vector<bool> served(inst.numCustomers() + 1, false); // index theo id 1-based (0 depot không dùng)
 
     for (const auto& v : s.vehicles) {
         double capacity = v.capacity(inst);
@@ -49,15 +51,17 @@ inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWei
                 VQ += posPart(trip.load - capacity) / capacity;
             }
 
-            // Vi phạm tầm bay drone (tổng quãng đường chuyến, cả đi lẫn về)
+            // Vi phạm tầm bay drone: L_D là giới hạn THỜI GIAN BAY (giây) — energy model "endurance",
+            // xác nhận từ dữ liệu benchmark thực tế. Không so sánh bằng quãng đường.
             if (isDrone && inst.drone_range > 0.0) {
-                VD += posPart(trip.travelDistance - inst.drone_range) / inst.drone_range;
+                VD += posPart(trip.flightTime - inst.drone_range) / inst.drone_range;
             }
 
             totalDistance += trip.travelDistance;
 
             // Vi phạm time window + vi phạm thời gian chờ hàng
             for (int custId : trip.customers) {
+                if (custId >= 1 && custId <= inst.numCustomers()) served[custId] = true;
                 const Customer& cust = inst.node(custId);
                 double arrival = trip.arrivalTime.at(custId);
                 if (H > 0.0) {
@@ -78,9 +82,21 @@ inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWei
     s.totalViolation = s.violationCapacity + s.violationRange + s.violationTimeWindow + s.violationWaiting;
     s.totalDistance = totalDistance;
 
+    int unassigned = 0;
+    for (int cid = 1; cid <= inst.numCustomers(); ++cid) {
+        if (!served[cid]) ++unassigned;
+    }
+    s.unassignedCount = unassigned;
+    // Mỗi khách chưa được phục vụ cũng được cộng vào tổng vi phạm (nhân hệ số lớn để luôn ưu tiên
+    // giảm số khách thiếu trước khi tối ưu makespan/other violations) — quy đổi theo cùng thang đo
+    // chuẩn hoá /n như các V_* khác để không làm lệch đơn vị của penalizedObjective.
+    double violationUnassigned = static_cast<double>(unassigned) / n;
+    s.totalViolation += violationUnassigned;
+
     s.penalizedObjective = s.normalizedMakespan
         + lambda.lambdaQ * s.violationCapacity
         + lambda.lambdaD * s.violationRange
         + lambda.lambdaTW * s.violationTimeWindow
-        + lambda.lambdaW * s.violationWaiting;
+        + lambda.lambdaW * s.violationWaiting
+        + 1000.0 * violationUnassigned; // phạt rất nặng khi còn khách chưa được phục vụ
 }

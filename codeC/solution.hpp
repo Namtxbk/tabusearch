@@ -21,6 +21,9 @@ struct Trip {
     double returnTime = 0.0;
     double load = 0.0;
     double travelDistance = 0.0;
+    double flightTime = 0.0;        // Tổng thời gian di chuyển thực tế của trip (giây) — dùng để check "Endurance"
+                                     // (drone_range là giới hạn THỜI GIAN BAY, không phải quãng đường).
+                                     // Với truck, trường này không dùng để kiểm tra ràng buộc gì nhưng vẫn được tính cho đầy đủ.
 
     // arrivalTime / waitingTime theo customer id (1-based) chỉ cho khách trong trip này
     std::unordered_map<int, double> arrivalTime;
@@ -55,8 +58,11 @@ struct Solution {
     double penalizedObjective = 0.0;   // F_lambda(s)
     double totalDistance = 0.0;
 
+    int unassignedCount = 0;           // Số khách CHƯA được phục vụ (0 nếu đã phục vụ hết)
+                                        // Nghiệm chỉ thực sự khả thi khi unassignedCount == 0 VÀ totalViolation <= epsilon.
+
     bool isFeasible(double epsilon = 1e-9) const {
-        return totalViolation <= epsilon;
+        return totalViolation <= epsilon && unassignedCount == 0;
     }
 };
 

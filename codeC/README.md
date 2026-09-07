@@ -1,97 +1,114 @@
-# MVRPD-TW Solver (C++)
+# MVRPD-TW Tabu Search Solver (C++)
 
-Bộ giải bài toán MVRPD-TW (Multi-Vehicle Routing Problem with Drones and Time Windows) bằng thuật toán Tabu Search, viết bằng C++ (tương đương `batch_compare.py`).
+Giải bài toán Multi-Vehicle Routing Problem with Drones and Time Windows (Multi-Trip),
+theo đúng pseudocode trong tài liệu `thuat_toan_tabu_search_NAM.pdf`.
 
-## 1. Cấu trúc thư mục
+## Cấu trúc file (theo 16 phần trong tài liệu)
 
-```
-codeC/
-├── main.cpp          # entry point, đọc dữ liệu, chạy batch, xuất kết quả
-├── instance.h         # đọc/parse instance bài toán
-├── construction.h      # thuật toán khởi tạo nghiệm ban đầu
-├── solution.h          # cấu trúc nghiệm, tính makespan
-├── tabu_search.h       # thuật toán Tabu Search chính
-├── include/json.hpp    # thư viện nlohmann/json (single header)
-└── solver.exe          # file thực thi sau khi biên dịch
-```
+| File                        | Nội dung                                                              |
+|------------------------------|-------------------------------------------------------------------------|
+| `instance.hpp`               | Đọc Instance từ JSON (tương thích `instance.py`)                       |
+| `solution.hpp`                | Customer/Trip/Vehicle/Solution/PenaltyWeights (mục 1)                  |
+| `schedule.hpp`                | STATIC_COMPATIBLE (mục 2) + RECOMPUTE_VEHICLE (mục 3)                  |
+| `evaluate.hpp`                | EVALUATE_SOLUTION — đo vi phạm, makespan, penalized objective (mục 4)  |
+| `feasibility.hpp`             | isFeasible + BETTER_INFEASIBLE (mục 5)                                 |
+| `move.hpp`                    | Định nghĩa Move + thuộc tính tabu (mục 6, 9)                           |
+| `operators.hpp`               | 6 toán tử lân cận: Relocate, Or-opt(2), Swap, 2-opt, Cross-trip, Trip-relocate (mục 6) + APPLY_MOVE |
+| `evaluate_move.hpp`           | EVALUATE_MOVE — áp dụng tạm thời, kiểm tra cấu trúc, trích tabu attrs (mục 8) |
+| `select_components.hpp`       | SELECT_SEARCH_COMPONENTS (mục 7)                                       |
+| `tabu.hpp`                    | Tabu tenure, IS_TABU, REGISTER_TABU (mục 9) + Aspiration (mục 10)      |
+| `select_move.hpp`             | SELECT_BEST_CANDIDATE (mục 11)                                         |
+| `strategic_oscillation.hpp`   | UPDATE_PENALTIES — Strategic Oscillation (mục 12)                      |
+| `best_solutions.hpp`          | UPDATE_BEST_SOLUTIONS + stagnation counters (mục 13)                   |
+| `construction.hpp`            | Init solution (construction heuristic) + hàm insertion dùng chung      |
+| `ruin_recreate.hpp`           | Ruin & Recreate (mục 14)                                                |
+| `candidate_pool.hpp`          | BUILD_CANDIDATE_POOL (mục 15)                                          |
+| `tabu_search.hpp`             | ADAPTIVE_TABU_SEARCH — vòng lặp chính (mục 16)                         |
+| `main.cpp`                    | Entry point: đọc instance, chạy solver, in kết quả                     |
+| `json.hpp`                    | Thư viện nlohmann/json (single header, MIT license)                    |
 
-## 2. Yêu cầu môi trường
+## Build (MSYS2/MinGW hoặc Linux g++)
 
-- Trình biên dịch C++17 trở lên. Khuyến nghị: **MinGW-w64 GCC** (bản WinLibs, POSIX threads, UCRT runtime).
-- Nếu máy chưa có, cài bằng winget:
-
-```powershell
-winget install --source winget --id BrechtSanders.WinLibs.POSIX.UCRT -e
-```
-
-Sau khi cài xong, **mở terminal mới** để PATH được cập nhật, rồi kiểm tra:
-
-```powershell
-g++ --version
-```
-
-## 3. Biên dịch
-
-Từ thư mục `codeC`:
-
-```powershell
-g++ -std=c++17 -O3 -static -static-libgcc -static-libstdc++ -o solver.exe main.cpp -I.
+```bash
+g++ -std=c++17 -O2 -Wall -Wextra -o solver main.cpp
 ```
 
-Lưu ý: bắt buộc dùng `-static -static-libgcc -static-libstdc++` để `solver.exe` chạy độc lập, không cần cài thêm DLL runtime (libstdc++-6.dll, libgcc_s_seh-1.dll...) trên máy chạy.
+## Chạy
 
-Không có lỗi in ra → biên dịch thành công, sinh ra file `solver.exe`.
-
-## 4. Chạy chương trình
-
-### Cú pháp
-
-```
-solver.exe --data_dir <thư_mục_dữ_liệu> --baseline <file_baseline.csv> [--output <file_kết_quả.csv>] [--max_iter N] [--max_no_improve N] [--tenure N] [--time_limit T] [--verbose]
+```bash
+./solver <path_to_instance.json> [override_max_wait]
 ```
 
-| Tham số | Bắt buộc | Mặc định | Ý nghĩa |
-|---|---|---|---|
-| `--data_dir` | Có | — | Thư mục chứa các file `.json` instance đầu vào |
-| `--baseline` | Có | — | File CSV chứa kết quả nền (best-known) để so sánh Gap |
-| `--output` | Không | `ket_qua_so_sanh.csv` | File CSV ghi kết quả chi tiết từng instance |
-| `--max_iter` | Không | 1000 | Số vòng lặp tối đa của Tabu Search |
-| `--max_no_improve` | Không | 200 | Dừng sớm nếu không cải thiện sau N vòng |
-| `--tenure` | Không | 7 | Độ dài tabu tenure |
-| `--time_limit` | Không | 60 (giây) | Giới hạn thời gian chạy cho mỗi instance |
-| `--verbose` | Không | tắt | In chi tiết tiến trình từng iteration ra màn hình |
+- `override_max_wait` (tuỳ chọn, số thực): override tạm giá trị L_w để test/debug —
+  bỏ qua nếu không truyền, solver sẽ dùng `max_wait` mặc định = 60 (theo `instance.py`),
+  hoặc trường `"max_wait"` nếu có trong JSON.
 
-### Ví dụ: chạy toàn bộ bộ dữ liệu, xuất log ra file txt
-
-```powershell
-.\solver.exe --data_dir ..\code\WithTimeWindows --baseline ..\code\result.csv --output ket_qua.csv --verbose > run_log.txt 2>&1
+Ví dụ:
+```bash
+./solver easy_test.json           # dùng L_w mặc định = 60
+./solver 6_5_1.json 400           # test với L_w = 400
 ```
 
-- `> run_log.txt 2>&1` chuyển toàn bộ output (kể cả lỗi) vào file `run_log.txt` trong thư mục `codeC` thay vì hiện trên màn hình.
+## Lưu ý quan trọng về instance mẫu `6_5_1.json`
 
-### Ví dụ: tuỳ chỉnh tham số Tabu Search
+Đã verify với `result.csv` (benchmark thực tế): solver cho `Makespan = 699.6657`,
+khớp gần khít với đáp án chuẩn `Cost = 699.6656534991815` (route truck giống hệt
+`[0,2,0]`; route drone khác cách chia trip nhưng phục vụ đúng tập khách và cho
+makespan tương đương).
 
-```powershell
-.\solver.exe --data_dir ..\code\WithTimeWindows --baseline ..\code\result.csv --output ket_qua.csv --max_iter 2000 --max_no_improve 300 --tenure 7 --time_limit 120 --verbose > run_log.txt 2>&1
-```
+## Các bug quan trọng đã phát hiện & sửa trong quá trình test với dữ liệu thực tế
 
-### Ví dụ: chạy nhanh thử 1 instance
+1. **`drone_range` ("Endurance fixed time") là GIỚI HẠN THỜI GIAN BAY (giây),
+   KHÔNG PHẢI giới hạn quãng đường.** Tài liệu PDF mô tả mô hình "range" đơn giản
+   (so khoảng cách), nhưng dữ liệu benchmark thực tế dùng mô hình "endurance"
+   (so thời gian bay = quãng đường / vận tốc). Đã sửa `staticCompatible`
+   (schedule.hpp) và vi phạm `V_D` (evaluate.hpp) để so sánh `flightTime`
+   thay vì `travelDistance`. Trip có thêm trường `flightTime` (solution.hpp).
 
-Copy 1 file `.json` cần test sang một thư mục riêng, ví dụ `testdata/`, rồi trỏ `--data_dir` vào đó:
+2. **Đơn vị thời gian toàn hệ thống là GIÂY, không phải phút.**
+   `max_wait` (L_w) mặc định phải là **3600** (= 60 phút), không phải 60 như
+   `instance.py` gợi ý (file đó tính bằng phút cho mục đích khác). Xác nhận từ
+   cột `Waiting time limit = 3600` trong `result.csv`. Đã sửa mặc định trong
+   `instance.hpp`. Nếu JSON của em không có trường `"max_wait"`, solver dùng
+   3600 — đúng theo mọi instance trong bộ benchmark (README dự án ghi rõ
+   "L_w = 60 phút cho tất cả các instance").
 
-```powershell
-mkdir testdata
-copy ..\code\WithTimeWindows\10.10.1.json testdata\
-.\solver.exe --data_dir testdata --baseline ..\code\result.csv --output test_out.csv --verbose
-```
+3. **`evaluateSolution` không hề kiểm tra thiếu khách hàng.** Trước đây, nếu
+   quá trình construction/insertion chỉ chèn được 1/6 khách (do static
+   incompatibility ở bug #1+#2 gây ra), solver vẫn báo "Feasible: YES" với
+   `Total violation: 0` vì hàm này chỉ tính V_Q/V_D/V_TW/V_W, không đếm số
+   khách còn thiếu. Đã thêm `Solution::unassignedCount` — `isFeasible()` giờ
+   yêu cầu cả `totalViolation <= epsilon` VÀ `unassignedCount == 0`. Số khách
+   thiếu cũng được cộng vào `totalViolation` (đã chuẩn hoá theo n) và phạt rất
+   nặng (hệ số 1000) trong `penalizedObjective` để Tabu Search luôn ưu tiên
+   phục vụ đủ khách trước khi tối ưu makespan.
 
-## 5. Kết quả đầu ra
+**File đính kèm `result.csv`**: bảng benchmark đầy đủ (nhiều instance khác nhau,
+mỗi instance có thể có nhiều dòng lời giải tối ưu tương đương) — dùng để so
+sánh `Makespan` solver tìm được với cột `Cost [minute]` cho cùng `Problem`.
+Lưu ý: cột 13 = `Truck paths`, cột 14 = `Drone paths` (dễ đọc nhầm ngược).
 
-- **File `--output` (CSV)**: mỗi dòng là 1 instance với Makespan tìm được, Makespan baseline, và % Gap (âm = tốt hơn baseline, dương = kém hơn).
-- **Log console / file redirect**: in tiến trình từng iteration khi dùng `--verbose`, kết thúc bằng phần "TỔNG KẾT" gồm số nghiệm khả thi, gap trung bình, gap nhỏ nhất/lớn nhất.
+Với instance này, khoảng cách giữa depot và khách hàng rất lớn (hàng nghìn đơn vị)
+so với vận tốc (~15-31 đơn vị/giây) — sau khi sửa 2 bug trên, mọi khách hàng đều
+tìm được phương tiện tương thích và solver đạt nghiệm khả thi hoàn toàn.
 
-## 6. Lưu ý
+## Trạng thái implementation
 
-- Dữ liệu mẫu hiện có tại `..\code\WithTimeWindows` (đầu vào) và `..\code\result.csv` (baseline).
-- Với bộ dữ liệu đầy đủ (~80 instance), thời gian chạy có thể mất vài phút tuỳ `--time_limit` và `--max_iter`.
-- Nếu sửa code (`.h`/`.cpp`), phải biên dịch lại bước 3 trước khi chạy lại.
+Đã hoàn thành đầy đủ 16 phần theo "Thứ tự code cần hoàn thành" ở cuối tài liệu.
+Cách tiếp cận hiện tại là **deep-copy + tính lại toàn bộ nghiệm sau mỗi move**
+(đúng khuyến nghị "Ở phiên bản đầu tiên" của tài liệu) — CHƯA tối ưu bằng
+incremental evaluation (chỉ tính lại phương tiện/trip bị ảnh hưởng ở mức move
+generation, dù RECOMPUTE_VEHICLE đã hỗ trợ `firstAffectedTrip` để làm việc này
+khi cần tối ưu tốc độ sau).
+
+### Các điểm em nên tự kiểm tra / tinh chỉnh thêm
+
+1. **Tham số** `TabuSearchParams` trong `tabu_search.hpp` (Nmax, Tlim, HStop,
+   HDiv, tau0, segment length, ruin rate) đang để giá trị thử nghiệm ban đầu
+   theo mục 12 tài liệu — em có thể chỉnh qua `struct TabuSearchParams` hoặc
+   thêm parser tham số dòng lệnh.
+2. **Hiệu năng**: với instance lớn, độ phức tạp sinh move (đặc biệt Swap —
+   O(n²) cặp khách, và Cross-trip — O(số trip² × độ dài trip²)) có thể chậm.
+   Nên áp dụng candidate limiting mạnh hơn (mục 7) khi scale lên.
+3. **SELECT_SEARCH_COMPONENTS / Ruin selection** dùng ngẫu nhiên (`std::mt19937`)
+   — seed cố định trong `TabuSearchParams::randomSeed` để tái lập kết quả khi debug.

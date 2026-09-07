@@ -35,7 +35,9 @@ struct Instance {
     double truck_capacity = 400.0;  // M_T
     double drone_capacity = 2.27;   // M_D
     double drone_range = 700.0;     // L_D (quãng đường tối đa 1 chuyến drone)
-    double max_wait = 60.0;         // L_w (thời gian chờ tối đa của hàng tại kho sau khi lấy)
+    double max_wait = 3600.0;       // L_w (thời gian chờ tối đa của hàng tại kho sau khi lấy)
+                                     // = 60 phút = 3600 giây (đơn vị thời gian toàn hệ thống là GIÂY,
+                                     // xác nhận từ cột "Waiting time limit"=3600 trong benchmark CSV thực tế).
 
     double truck_speed = 1.0;
     double drone_speed = 1.5;
@@ -109,8 +111,8 @@ inline Instance readJsonInstance(const std::string& filepath) {
     inst.truck_speed    = data.value("truck_vel", 1.0);
     inst.drone_speed    = data.value("drone_vel", 1.5);
     double depotClose   = data.value("close", 9999.0);
-    // max_wait (L_w): không có trong JSON mẫu -> giữ giá trị mặc định của Instance
-    // (60.0, khớp với L_W_MAX trong instance.py); có thể override nếu JSON có trường "max_wait".
+    // max_wait (L_w): không có trong JSON mẫu -> mặc định 3600 giây (= 60 phút, theo benchmark thực tế:
+    // cột "Waiting time limit" = 3600 trong result.csv). Có thể override nếu JSON có trường "max_wait".
     inst.max_wait = data.value("max_wait", inst.max_wait);
 
     inst.depot = Customer{};

@@ -11,16 +11,18 @@
 // Mục 2. Kiểm tra tính tương thích tĩnh
 // ============================================================
 // Khách i chỉ nên được xem là tương thích với drone nếu:
-//   i in C2, q_i <= M_D, d_0i + d_i0 <= L_D, tau^D_i0 <= L_w
-// Với truck: q_i <= M_T, tau^T_i0 <= L_w  (không có ràng buộc quãng đường)
+//   i in C2, q_i <= M_D, flightTime(0,i)+flightTime(i,0) <= L_D, tau^D_i0 <= L_w
+// LƯU Ý: L_D (drone_range / "Endurance fixed time") là GIỚI HẠN THỜI GIAN BAY (giây),
+// KHÔNG PHẢI giới hạn quãng đường — xác nhận từ dữ liệu benchmark thực tế (energy model "endurance").
+// Vì vậy ta so sánh theo travelTime (quãng đường / vận tốc), không so sánh trực tiếp khoảng cách.
 inline bool staticCompatible(const Instance& inst, int customerId, const Vehicle& v) {
     const Customer& c = inst.node(customerId);
 
     if (v.type == VehicleType::DRONE) {
         if (c.is_c1) return false;                                   // phải thuộc C2
         if (c.demand > inst.drone_capacity) return false;             // q_i <= M_D
-        double roundTripDist = inst.dist(0, customerId) + inst.dist(customerId, 0);
-        if (roundTripDist > inst.drone_range) return false;           // d_0i + d_i0 <= L_D
+        double roundTripFlightTime = inst.travelTime(0, customerId, true) + inst.travelTime(customerId, 0, true);
+        if (roundTripFlightTime > inst.drone_range) return false;     // thời gian bay khứ hồi <= L_D (giây)
         double travelBack = inst.travelTime(customerId, 0, true);     // tau^D_i0
         if (travelBack > inst.max_wait) return false;                 // <= L_w
         return true;
@@ -54,6 +56,7 @@ inline void recomputeVehicle(const Instance& inst, Vehicle& v, int firstAffected
         trip.startTime = currentTime;
         trip.load = 0.0;
         trip.travelDistance = 0.0;
+        trip.flightTime = 0.0;
         trip.arrivalTime.clear();
         trip.waitingTime.clear();
 
@@ -62,15 +65,21 @@ inline void recomputeVehicle(const Instance& inst, Vehicle& v, int firstAffected
 
         for (int custId : trip.customers) {
             const Customer& cust = inst.node(custId);
-            t += inst.travelTime(previousNode, custId, isDrone);
+            double legTime = inst.travelTime(previousNode, custId, isDrone);
+            t += legTime;
             t = std::max(t, cust.ready);           // a_i = max{e_i, prev + tau}
             trip.arrivalTime[custId] = t;
             trip.load += cust.demand;
             trip.travelDistance += inst.dist(previousNode, custId);
+            trip.flightTime += legTime;
             previousNode = custId;
         }
 
-        t += inst.travelTime(previousNode, 0, isDrone);
+        {
+            double lastLegTime = inst.travelTime(previousNode, 0, isDrone);
+            t += lastLegTime;
+            trip.flightTime += lastLegTime;
+        }
         trip.travelDistance += inst.dist(previousNode, 0);
         trip.returnTime = t;
 

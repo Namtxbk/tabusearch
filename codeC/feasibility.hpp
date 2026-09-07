@@ -7,9 +7,9 @@
 
 static constexpr double EPS = 1e-9;
 
-// Nghiệm khả thi khi V_Sigma(s) <= epsilon.
+// Nghiệm khả thi khi V_Sigma(s) <= epsilon VÀ đã phục vụ hết mọi khách hàng.
 inline bool isFeasible(const Solution& s, double epsilon = EPS) {
-    return s.totalViolation <= epsilon;
+    return s.totalViolation <= epsilon && s.unassignedCount == 0;
 }
 
 // FUNCTION BETTER_INFEASIBLE(s1, s2)
