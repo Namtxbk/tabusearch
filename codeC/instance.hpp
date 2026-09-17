@@ -110,9 +110,8 @@ inline Instance readJsonInstance(const std::string& filepath) {
     inst.drone_range    = data.value("drone_lim", 700.0);
     inst.truck_speed    = data.value("truck_vel", 1.0);
     inst.drone_speed    = data.value("drone_vel", 1.5);
-    double depotClose   = data.value("close", 9999.0);
-    // max_wait (L_w): không có trong JSON mẫu -> mặc định 3600 giây (= 60 phút, theo benchmark thực tế:
-    // cột "Waiting time limit" = 3600 trong result.csv). Có thể override nếu JSON có trường "max_wait".
+    double depotClose   = data.value("close", 999999.0);
+
     inst.max_wait = data.value("max_wait", inst.max_wait);
 
     inst.depot = Customer{};
