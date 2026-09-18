@@ -58,11 +58,42 @@ class TabuSet:
 
 def _obj(sol: Solution, inst: Instance,
          w_tw: float, w_cap: float, w_range: float, w_assign: float) -> float:
+<<<<<<< HEAD
     return (sol.makespan()
             + w_tw     * sol.penalty_tw(inst)
             + w_cap    * sol.penalty_cap(inst)
             + w_range  * sol.penalty_range(inst)
             + w_assign * sol.penalty_drone_assign(inst))
+=======
+    assign_penalty = (sol.penalty_drone_assign(inst)
+                       if hasattr(sol, 'penalty_drone_assign') else 0.0)
+    cap_pen   = sol.penalty_cap(inst)
+    range_pen = sol.penalty_range(inst)
+    tw_pen    = sol.penalty_tw(inst)
+    # Ràng buộc L_w: thời gian chờ tối đa tại điểm khách.
+    # Xử lý như ràng buộc CỨNG (hard penalty 1e6) — cùng nhóm với TW/cap/range
+    # vì construction.py đã đảm bảo lời giải khởi đầu feasible về L_w, nên
+    # mọi move tạo ra vi phạm L_w đều phải "đắt" hơn bất kỳ lợi ích makespan.
+    wait_pen  = sol.penalty_wait(inst) if hasattr(sol, 'penalty_wait') else 0.0
+
+    # Hai mức hard penalty tách biệt:
+    # - Cap và Range: hệ số 1e9 (ràng buộc VẬT LÝ tuyệt đối — xe không thể
+    #   chở vượt tải hay drone không thể bay vượt pin, không có ngoại lệ)
+    # - TW và Wait: hệ số 1e6 (ràng buộc cứng thời gian)
+    # Tách 2 mức vì: khi TW penalty rất lớn, giảm TW không được phép
+    # "mua" quyền vi phạm cap/range dù nhỏ.
+    HARD_PHYSICAL = 1e9   # cap, range
+    HARD_TEMPORAL = 1e6   # tw, wait
+
+    hard_penalty = (HARD_PHYSICAL * (cap_pen + range_pen)
+                  + HARD_TEMPORAL * (tw_pen + wait_pen))
+
+    return (sol.makespan()
+            + w_cap    * cap_pen
+            + w_range  * range_pen
+            + w_assign * assign_penalty
+            + hard_penalty)
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 
 
 def _drone_eligible(c: Customer, inst: Instance) -> bool:
@@ -74,6 +105,41 @@ def _drone_eligible(c: Customer, inst: Instance) -> bool:
     return rt <= inst.drone_range
 
 
+<<<<<<< HEAD
+=======
+# ─────────────────────────────────────────────────────────────────────────────
+# Forward Time Slack — kiểm tra nhanh O(1)/O(k) thay vì recompute O(n) toàn route
+#
+# Theo tài liệu: F[i] = min_{k>=i}(l[k] - t[k]) đã được precompute_trip tính sẵn
+# trong trip.F. Ý nghĩa: delay tối đa có thể "nhồi" thêm vào từ vị trí i trở đi
+# mà KHÔNG vi phạm time window bất kỳ node nào phía sau (kể cả depot cuối).
+#
+# Quy tắc dùng: nếu một thay đổi tại vị trí i làm node i+1 (node theo cũ) đến
+# trễ hơn Δ so với trước, thay đổi đó CHẮC CHẮN feasible về TW của phần ĐUÔI
+# CŨ (không đổi) khi và chỉ khi Δ <= trip.F[i+1] (slack TẠI THỜI ĐIỂM TRƯỚC
+# khi chèn). Đây chỉ là phép lọc nhanh: nếu Δ > F[i+1] → chắc chắn vi phạm,
+# bỏ qua ngay không cần recompute. Nếu Δ <= F[i+1] → có khả năng feasible,
+# nhưng vẫn cần recompute đầy đủ để lấy giá trị makespan/penalty chính xác
+# cho _obj() (slack chỉ trả lời CÓ/KHÔNG vi phạm, không cho biết makespan
+# mới hay tổng penalty mới).
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _quick_feasible_after_pos(trip: Trip, pos_after: int, delay: float) -> bool:
+    """
+    Lọc nhanh O(1): trả về False nếu chắc chắn vi phạm TW ở phần đuôi
+    [pos_after+1 .. cuối] của `trip` (TRƯỚC khi thay đổi) khi đuôi đó bị
+    delay thêm `delay` đơn vị thời gian. Trả về True nghĩa là "có thể
+    feasible, cần kiểm tra kỹ hơn" — KHÔNG đảm bảo feasible tuyệt đối,
+    chỉ loại bỏ chắc chắn các trường hợp vi phạm.
+    """
+    if delay <= 1e-9:
+        return True  # không trễ hơn cũ => không thể vi phạm thêm
+    if pos_after + 1 >= len(trip.F):
+        return True  # không có đuôi để kiểm tra (vd. pos_after là node cuối)
+    return delay <= trip.F[pos_after + 1] + 1e-9
+
+
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 def _clean(sol: Solution, inst: Instance):
     for v in sol.trucks + sol.drones:
         v.trips = [t for t in v.trips if len(t.customers()) > 0]
@@ -109,11 +175,25 @@ def _gen_relocate(sol: Solution, inst: Instance,
     random.shuffle(all_custs)
     all_custs = all_custs[:30]
 
+<<<<<<< HEAD
+=======
+    cdata = {c.id: c for c in inst.all_nodes}
+
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
     for (src_drone, src_vi, src_ti, src_pos, cid) in all_custs:
         cust = inst.customers[cid - 1]
         tmp = sol.copy()
         sv = tmp.drones[src_vi] if src_drone else tmp.trucks[src_vi]
         sv.trips[src_ti].sequence.pop(src_pos)
+<<<<<<< HEAD
+=======
+        # QUAN TRỌNG: a[]/F[] không tự cập nhật sau khi sửa sequence trực
+        # tiếp, và vì multi-trip có tính tuần tự (start_time trip sau phụ
+        # thuộc return_time trip trước), phải precompute lại CẢ VEHICLE
+        # nguồn (không chỉ 1 trip) trước khi bộ lọc slack đọc dst_trip.a/F
+        # — đặc biệt khi dst trùng đúng vehicle này.
+        precompute_vehicle(sv, inst)
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 
         for (_, dst_drone, dst_vi) in avs:
             if dst_drone and not _drone_eligible(cust, inst):
@@ -122,6 +202,31 @@ def _gen_relocate(sol: Solution, inst: Instance,
 
             for dst_ti, dst_trip in enumerate(dv.trips):
                 for ins_pos in range(1, len(dst_trip.sequence)):
+<<<<<<< HEAD
+=======
+                    # ── Lọc nhanh O(1) bằng Forward Time Slack (mục 3.1 tài
+                    # liệu): tính thử arrival tại cid và tại node kế tiếp CŨ,
+                    # so với slack F của dst_trip TRƯỚC khi chèn, để loại
+                    # ngay các vị trí chắc chắn vi phạm TW phía đuôi —
+                    # không cần cand.copy()+recompute_all() (O(n)) cho chúng.
+                    prev_id = dst_trip.sequence[ins_pos - 1]
+                    next_id = dst_trip.sequence[ins_pos]
+                    t_prev = dst_trip.a[ins_pos - 1]
+                    s_prev = cdata[prev_id].service
+                    t_new_at_cid = max(cust.ready,
+                                        t_prev + s_prev + inst.travel_time(prev_id, cid, dst_drone))
+                    if t_new_at_cid > cust.due + 1e-9:
+                        continue  # vi phạm TW ngay tại chính node được chèn
+                    next_cust = cdata[next_id]
+                    t_old_at_next = dst_trip.a[ins_pos]
+                    t_new_at_next = max(next_cust.ready,
+                                         t_new_at_cid + cust.service
+                                         + inst.travel_time(cid, next_id, dst_drone))
+                    delay = t_new_at_next - t_old_at_next
+                    if not _quick_feasible_after_pos(dst_trip, ins_pos - 1, delay):
+                        continue  # chắc chắn vi phạm đuôi -> bỏ qua, không recompute
+
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
                     cand = tmp.copy()
                     cv = cand.drones[dst_vi] if dst_drone else cand.trucks[dst_vi]
                     cv.trips[dst_ti].sequence.insert(ins_pos, cid)
@@ -395,6 +500,32 @@ _GENERATORS = [
 ]
 
 
+<<<<<<< HEAD
+=======
+def _hard_ok(sol: Solution, inst: Instance) -> bool:
+    """True nếu KHÔNG vi phạm ràng buộc cứng (tải trọng, tầm bay drone, time
+    window). Từ khi construction.py đảm bảo TW-feasible tuyệt đối ngay từ
+    điểm khởi tạo (mượn thêm phương tiện ảo khi cần), time window được coi
+    là ràng buộc vật lý cứng giống tải trọng/tầm bay, không còn là ràng
+    buộc mềm cần "dò đường qua vùng infeasible" như thiết kế trước đây."""
+    wait_pen = sol.penalty_wait(inst) if hasattr(sol, 'penalty_wait') else 0.0
+    return (sol.penalty_cap(inst)   <= 1e-9
+            and sol.penalty_range(inst) <= 1e-9
+            and sol.penalty_tw(inst)    <= 1e-9
+            and wait_pen                <= 1e-9)
+
+
+def _better_overall(cand: Solution, cand_obj: float, cand_hard_ok: bool,
+                     incumbent: Solution, incumbent_obj: float, incumbent_hard_ok: bool) -> bool:
+    """So sánh phân cấp (lexicographic) cho best_overall:
+    1) Ưu tiên tuyệt đối nghiệm không vi phạm ràng buộc cứng.
+    2) Trong cùng nhóm (cả 2 đều hard_ok hoặc đều không), so objective."""
+    if cand_hard_ok != incumbent_hard_ok:
+        return cand_hard_ok  # cand thắng nếu nó hard_ok còn incumbent không
+    return cand_obj < incumbent_obj
+
+
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 def advanced_tabu_search(
     init_sol: Solution, inst: Instance, cfg: TabuSearchConfig
 ) -> Tuple[Solution, List[float]]:
@@ -407,6 +538,20 @@ def advanced_tabu_search(
     w_tw, w_cap, w_range, w_assign = 50.0, 200.0, 200.0, 500.0
     best_obj = _obj(best, inst, w_tw, w_cap, w_range, w_assign)
 
+<<<<<<< HEAD
+=======
+    # best_overall: theo dõi nghiệm có objective (gồm phạt) nhỏ nhất từng gặp,
+    # BẤT KỂ feasible hay không. Dùng làm phương án dự phòng nếu suốt quá trình
+    # không tìm được nghiệm feasible tuyệt đối nào (instance lớn / khó).
+    # Dùng trọng số phạt CỐ ĐỊNH (giá trị khởi tạo) để các lần so sánh giữa các
+    # vòng lặp có ý nghĩa nhất quán, không bị lệch do w_* thay đổi theo
+    # strategic oscillation.
+    W_TW0, W_CAP0, W_RANGE0, W_ASSIGN0 = w_tw, w_cap, w_range, w_assign
+    best_overall = current.copy()
+    best_overall_obj = _obj(best_overall, inst, W_TW0, W_CAP0, W_RANGE0, W_ASSIGN0)
+    best_overall_hard_ok = _hard_ok(best_overall, inst)
+
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
     tabu = TabuSet(tenure=cfg.tenure_base)
     history = [best.makespan()]
 
@@ -455,7 +600,41 @@ def advanced_tabu_search(
 
         current = nb_sol
 
+<<<<<<< HEAD
         # Strategic Oscillation
+=======
+        # Cập nhật best_overall theo objective cố định (không điều kiện feasible).
+        # Đây là lưới an toàn: nếu current đang cải thiện dần nhưng chưa kịp
+        # chạm feasible tuyệt đối, ta vẫn giữ lại trạng thái tốt nhất đã thấy.
+        cur_obj_fixed = _obj(current, inst, W_TW0, W_CAP0, W_RANGE0, W_ASSIGN0)
+        cur_hard_ok = _hard_ok(current, inst)
+        if _better_overall(current, cur_obj_fixed, cur_hard_ok,
+                            best_overall, best_overall_obj, best_overall_hard_ok):
+            best_overall_obj = cur_obj_fixed
+            best_overall_hard_ok = cur_hard_ok
+            best_overall = current.copy()
+
+        # Strategic Oscillation
+        #
+        # LƯU Ý QUAN TRỌNG sau khi khóa cứng TW/Cap/Range (xem _obj): vì
+        # construction.py giờ đảm bảo điểm khởi tạo luôn feasible tuyệt đối
+        # về cả 3 ràng buộc này, và mọi toán tử lân cận đều áp dụng cùng
+        # hard-penalty 1e6 trong _obj, nên trong PHẦN LỚN các vòng lặp,
+        # current sẽ luôn feasible (penalty_cap = penalty_range = penalty_tw
+        # = 0) — current.is_feasible() do đó gần như luôn True. Hệ quả:
+        # nhánh "feasible_streak" dưới đây sẽ được kích hoạt liên tục, làm
+        # w_cap/w_range/w_tw giảm dần một chiều về sàn (20.0/20.0/10.0) và
+        # không bao giờ tăng lại — vì nhánh "infeasible_streak" hiếm khi xảy
+        # ra. Điều này KHÔNG gây sai (vì hard-penalty 1e6 đã đảm nhiệm việc
+        # chặn vi phạm, không phụ thuộc w_cap/w_range/w_tw nữa), nhưng phép
+        # oscillation qua lại biên feasible/infeasible — vốn có ý nghĩa khi
+        # các ràng buộc này còn LÀ MỀM — giờ chỉ còn tác dụng hình thức.
+        # Giữ lại đoạn này (không xóa) để không phá vỡ cấu trúc vòng lặp và
+        # vì w_assign vẫn là soft-constraint thực sự (drone phục vụ khách
+        # C1 vẫn có thể xảy ra và cần phạt mềm), nhưng người đọc code cần
+        # hiểu rằng w_cap/w_range/w_tw từ đây CHỈ còn vai trò phụ trợ, không
+        # còn là cơ chế chính kiểm soát feasibility nữa.
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
         if current.is_feasible(inst):
             feasible_streak += 1
             infeasible_streak = 0
@@ -494,4 +673,18 @@ def advanced_tabu_search(
                   f"  feasible={current.is_feasible(inst)}"
                   f"  w_tw={w_tw:.1f}")
 
+<<<<<<< HEAD
+=======
+    # Nếu suốt quá trình KHÔNG tìm được nghiệm feasible tuyệt đối nào,
+    # best vẫn còn nguyên là init_sol (construction). Trong trường hợp đó,
+    # trả về best_overall — nghiệm có objective (gồm phạt) nhỏ nhất từng
+    # gặp — vì nó luôn tốt hơn hoặc bằng construction, kể cả khi vẫn infeasible.
+    if not best.is_feasible(inst) and best_overall_obj < best_obj:
+        if cfg.verbose:
+            print(f"  -> Không đạt feasible tuyệt đối; trả về best_overall "
+                  f"(obj={best_overall_obj:.2f} < construction obj={best_obj:.2f})")
+        best = best_overall
+        history.append(best.makespan())
+
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
     return best, history

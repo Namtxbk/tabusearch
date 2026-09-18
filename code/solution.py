@@ -100,6 +100,7 @@ def precompute_trip(trip: Trip, inst: Instance) -> None:
     a[0] = trip.start_time
 
     for i in range(1, n):
+<<<<<<< HEAD
         prev_id = seq[i - 1]
         curr_id = seq[i]
         t_travel = inst.travel_time(prev_id, curr_id, is_drone=is_drone)
@@ -107,6 +108,16 @@ def precompute_trip(trip: Trip, inst: Instance) -> None:
         depart_prev = a[i - 1] + s_prev
         arrive = depart_prev + t_travel
         a[i] = max(arrive, cdata[curr_id].ready)
+=======
+        prev = seq[i - 1]
+        curr = seq[i]
+        t_travel = inst.travel_time(prev, curr, is_drone=is_drone)
+        s_prev = cdata[prev].service
+        arrive = a[i - 1] + s_prev + t_travel
+        # ignore_tw=True: không chờ (đến lúc nào phục vụ luôn lúc đó)
+        # ignore_tw=False: chờ nếu đến sớm hơn ready time
+        a[i] = arrive if inst.ignore_tw else max(arrive, cdata[curr].ready)
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 
     # ── Forward Time Slack F[i] ─────────────────────────────────────────────
     # F[i] = min(due[i] - a[i],  F[i+1] - wait[i+1])
@@ -199,7 +210,12 @@ class Solution:
         return max(times) if times else 0.0
 
     def penalty_tw(self, inst: Instance) -> float:
+<<<<<<< HEAD
         """Phạt vi phạm time window: tổng (a[i] - due[i])+ cho mọi khách hàng."""
+=======
+        if inst.ignore_tw:
+            return 0.0  # bỏ qua TW hoàn toàn
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
         total = 0.0
         cdata = {c.id: c for c in inst.all_nodes}
         for trip in self.truck_routes + self.drone_routes:
@@ -234,6 +250,7 @@ class Solution:
             total += max(0.0, flight_time - inst.drone_range)
         return total
 
+<<<<<<< HEAD
     def penalty_drone_assign(self, inst: Instance) -> float:
         """Phạt nếu drone phục vụ khách C1 (chỉ-truck)."""
         total = 0.0
@@ -258,6 +275,38 @@ class Solution:
                 and self.penalty_cap(inst)       == 0.0
                 and self.penalty_range(inst)     == 0.0
                 and self.penalty_drone_assign(inst) == 0.0)
+=======
+    def penalty_wait(self, inst: Instance) -> float:
+        if inst.ignore_tw:
+            return 0.0  # bỏ qua L_w hoàn toàn
+        total = 0.0
+        cdata = {c.id: c for c in inst.all_nodes}
+        for trip in self.truck_routes + self.drone_routes:
+            seq = trip.sequence
+            for pos in range(1, len(seq) - 1):
+                nid = seq[pos]
+                if nid == 0:
+                    continue
+                prev = seq[pos - 1]
+                t_prev_depart = trip.a[pos - 1] + cdata[prev].service
+                arrive_i = t_prev_depart + inst.travel_time(prev, nid, trip.is_drone)
+                wait_i = max(0.0, cdata[nid].ready - arrive_i)
+                total += max(0.0, wait_i - inst.max_wait)
+        return total
+
+    def objective(self, inst: Instance) -> float:
+        return (self.makespan()
+                + 50.0  * self.penalty_tw(inst)
+                + 200.0 * self.penalty_cap(inst)
+                + 200.0 * self.penalty_range(inst)
+                + 200.0 * self.penalty_wait(inst))
+
+    def is_feasible(self, inst: Instance) -> bool:
+        return (self.penalty_tw(inst)    == 0.0
+                and self.penalty_cap(inst)   == 0.0
+                and self.penalty_range(inst) == 0.0
+                and self.penalty_wait(inst)  == 0.0)
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 
     def all_served(self, inst: Instance) -> bool:
         served = set()
@@ -271,6 +320,7 @@ class Solution:
 
     def recompute_all(self, inst: Instance) -> None:
         """
+<<<<<<< HEAD
         Tính lại toàn bộ hệ thống bằng cách gọi precompute_vehicle cho từng xe.
         ĐÂY LÀ HÀM DUY NHẤT được gọi sau khi thay đổi sequence bất kỳ.
         """
@@ -278,6 +328,15 @@ class Solution:
             # Dọn trip rỗng trước khi compute
             v.trips = [t for t in v.trips if len(t.sequence) > 2 or
                        t.sequence == [0, 0]]
+=======
+        Tính lại toàn bộ thông số (a[], F[], load, dist, return_time) cho
+        mọi xe và mọi trip, đảm bảo tính tuần tự multi-trip.
+        Đây là hàm DUY NHẤT được gọi sau khi thay đổi sequence bất kỳ.
+        """
+        for v in self.trucks + self.drones:
+            v.trips = [t for t in v.trips if len(t.sequence) > 2
+                       or t.sequence == [0, 0]]
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
             if not v.trips:
                 v.trips = [Trip(sequence=[0, 0], is_drone=v.is_drone)]
             precompute_vehicle(v, inst)

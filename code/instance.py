@@ -4,7 +4,13 @@ import math
 from dataclasses import dataclass, field
 from typing import List, Set
 
+<<<<<<< HEAD
 L_W = 0.0  # Service time cố định cho tất cả khách hàng (phút)
+=======
+L_W = 0.0    # Service time tại điểm khách = 0 (bốc/dỡ tức thì)
+L_W_MAX = 3600.0  # Thời gian chờ tối đa của xe tại điểm khách = 60 phút = 3600 giây
+                  # Toàn bộ bài toán dùng đơn vị GIÂY (speed m/s, dist m, time s)
+>>>>>>> 36a6bab7a9c8f9c11355472fa708ef5d3369aa1e
 
 @dataclass
 class Customer:
@@ -25,6 +31,7 @@ class Instance:
     truck_capacity: float
     drone_capacity: float
     drone_range: float
+    max_wait: float = L_W_MAX  # Thời gian chờ tối đa tại điểm khách (L_w)
     truck_speed: float = 1.0
     drone_speed: float = 1.5
     depot: Customer = None
@@ -32,6 +39,10 @@ class Instance:
     c1_ids: Set[int] = field(default_factory=set)
     c2_ids: Set[int] = field(default_factory=set)
     _dist: List[List[float]] = field(default_factory=list, repr=False)
+    # Khi ignore_tw=True: bỏ qua hoàn toàn time window và L_w
+    # (xe không chờ, không kiểm tra due, không phạt TW/Wait)
+    # Dùng để so sánh với baseline no-TW
+    ignore_tw: bool = False
 
     def build_dist(self):
         nodes = [self.depot] + self.customers
@@ -140,6 +151,7 @@ def read_json_instance(filepath: str) -> Instance:
 
     inst = Instance(
         name           = instance_name,
+        max_wait       = L_W_MAX,
         num_trucks     = num_trucks,
         num_drones     = num_drones,
         truck_capacity = truck_capacity,
