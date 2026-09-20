@@ -13,17 +13,17 @@
 // Mục 9.4-9.6 Tabu tenure, kiểm tra & ghi tabu
 // ============================================================
 struct TabuList {
-    std::unordered_map<std::string, long long> tabuUntil; // key = TabuAttribute.key -> iteration hết hạn
+    std::unordered_map<TabuAttribute, long long, TabuAttributeHash> tabuUntil; // -> iteration hết hạn
 
     void clear() { tabuUntil.clear(); }
 
     long long getUntil(const TabuAttribute& a) const {
-        auto it = tabuUntil.find(a.key);
+        auto it = tabuUntil.find(a);
         return (it == tabuUntil.end()) ? -1 : it->second;
     }
 
     void setUntil(const TabuAttribute& a, long long iter) {
-        tabuUntil[a.key] = iter;
+        tabuUntil[a] = iter;
     }
 };
 

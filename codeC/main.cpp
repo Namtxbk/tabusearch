@@ -21,7 +21,8 @@ static void printSolution(const Instance& inst, const Solution& s) {
                << ", W=" << s.violationWaiting << ")\n";
     std::cout << "Feasible: " << (s.isFeasible() ? "YES" : "NO") << "\n\n";
 
-    for (const auto& v : s.vehicles) {
+    for (const auto& vp : s.vehicles) {
+        const auto& v = *vp;
         std::cout << "Vehicle " << v.id << " [" << vehicleTypeName(v.type)
                    << "] completion=" << v.completionTime << "\n";
         for (size_t ti = 0; ti < v.trips.size(); ++ti) {
@@ -56,7 +57,10 @@ int main(int argc, char** argv) {
         params.maxIterations = 2000;
         params.timeLimitSeconds = 20.0;
         params.stoppingStagnation = 500;
-        params.diversificationStagnation = 360;
+        // 360 quá cao so với tổng số iteration khả dụng trong ngân sách thời gian (n lớn chỉ chạy
+        // được ~100-400 iteration/20s) -> ruin-recreate gần như không bao giờ được kích hoạt.
+        // Hạ xuống để search có cơ hội thoát local optimum trong cùng ngân sách thời gian.
+        params.diversificationStagnation = 30;
 
         TabuSearchResult result = adaptiveTabuSearch(inst, params);
 

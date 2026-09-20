@@ -24,11 +24,17 @@ inline bool updateBestSolutions(const Solution& current,
             improvedRecord = true;
         }
     } else {
-        if (betterInfeasible(current, bestInfeasible.get())) {
+        // BUG cũ: gán improvedRecord = true VÔ ĐIỀU KIỆN mỗi khi bestFeasible == nullptr, bất kể
+        // current có thực sự tốt hơn bestInfeasible hay không. Hệ quả: hStop/hDiv (đếm số iteration
+        // liên tiếp KHÔNG cải thiện) không bao giờ tăng trong suốt giai đoạn chưa có nghiệm khả thi
+        // -> diversification (ruin-recreate) không bao giờ được kích hoạt cho tới khi tìm được nghiệm
+        // khả thi đầu tiên — chính là trường hợp cần diversification nhất (instance lớn, mắc kẹt).
+        bool better = betterInfeasible(current, bestInfeasible.get());
+        if (better) {
             bestInfeasible = std::make_unique<Solution>(current);
         }
         if (bestFeasible == nullptr) {
-            improvedRecord = true; // theo pseudocode: cải thiện "record" khi vẫn ở giai đoạn tìm nghiệm khả thi
+            improvedRecord = better; // chỉ coi là cải thiện khi bestInfeasible thực sự tốt hơn
         }
     }
 

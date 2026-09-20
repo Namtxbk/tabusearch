@@ -20,16 +20,13 @@ inline double computeH(const Instance& inst, double initialMakespan) {
     return H;
 }
 
-// PROCEDURE EVALUATE_SOLUTION(solution s, penaltyWeights lambda, H)
-// Tính lại toàn bộ lịch trình (RECOMPUTE_VEHICLE(s, v, 0)) rồi đo các đại lượng vi phạm.
-inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWeights& lambda, double H) {
-    for (auto& v : s.vehicles) {
-        recomputeVehicleFull(inst, v);
-    }
-
+// Đo các đại lượng vi phạm dựa trên lịch trình HIỆN CÓ của các vehicle (không recompute).
+// Dùng khi caller đã tự recompute đúng những vehicle bị move/insertion tác động — tránh
+// recompute lại toàn bộ solution (lãng phí O(n) mỗi candidate khi chỉ 1-2 vehicle thay đổi).
+inline void aggregateSolutionMetrics(const Instance& inst, Solution& s, const PenaltyWeights& lambda, double H) {
     double maxCompletion = 0.0;
-    for (const auto& v : s.vehicles) {
-        maxCompletion = std::max(maxCompletion, v.completionTime);
+    for (const auto& vp : s.vehicles) {
+        maxCompletion = std::max(maxCompletion, vp->completionTime);
     }
     s.makespan = maxCompletion;
     s.normalizedMakespan = (H > 0.0) ? (s.makespan / H) : s.makespan;
@@ -41,7 +38,8 @@ inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWei
     double totalDistance = 0.0;
     std::vector<bool> served(inst.numCustomers() + 1, false); // index theo id 1-based (0 depot không dùng)
 
-    for (const auto& v : s.vehicles) {
+    for (const auto& vp : s.vehicles) {
+        const Vehicle& v = *vp;
         double capacity = v.capacity(inst);
         bool isDrone = (v.type == VehicleType::DRONE);
 
@@ -60,10 +58,11 @@ inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWei
             totalDistance += trip.travelDistance;
 
             // Vi phạm time window + vi phạm thời gian chờ hàng
-            for (int custId : trip.customers) {
+            for (std::size_t pos = 0; pos < trip.customers.size(); ++pos) {
+                int custId = trip.customers[pos];
                 if (custId >= 1 && custId <= inst.numCustomers()) served[custId] = true;
                 const Customer& cust = inst.node(custId);
-                double arrival = trip.arrivalTime.at(custId);
+                double arrival = trip.arrivalTime[pos];
                 if (H > 0.0) {
                     VTW += posPart(arrival - cust.due) / H;
                 }
@@ -99,4 +98,17 @@ inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWei
         + lambda.lambdaTW * s.violationTimeWindow
         + lambda.lambdaW * s.violationWaiting
         + 1000.0 * violationUnassigned; // phạt rất nặng khi còn khách chưa được phục vụ
+}
+
+// PROCEDURE EVALUATE_SOLUTION(solution s, penaltyWeights lambda, H)
+// Tính lại toàn bộ lịch trình (RECOMPUTE_VEHICLE(s, v, 0)) rồi đo các đại lượng vi phạm.
+// Dùng khi KHÔNG chắc vehicle nào đã có lịch trình đúng (construction, sau ruin, sau full rebuild).
+// Nếu caller đã tự recompute đúng phạm vi (evaluate_move.hpp), dùng thẳng aggregateSolutionMetrics.
+inline void evaluateSolution(const Instance& inst, Solution& s, const PenaltyWeights& lambda, double H) {
+    // detachVehicle (không dereference thẳng shared_ptr) để không vô tình mutate 1 vehicle đang
+    // được Solution khác (vd. current trước khi copy) chia sẻ chung con trỏ.
+    for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) {
+        recomputeVehicleFull(inst, s.detachVehicle(vi));
+    }
+    aggregateSolutionMetrics(inst, s, lambda, H);
 }

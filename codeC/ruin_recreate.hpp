@@ -38,9 +38,9 @@ inline std::vector<int> selectRuinCustomers(const Instance& inst, const Solution
     // Nhóm 2: khách trên phương tiện critical (vehicle có completionTime == makespan)
     double makespan = s.makespan;
     std::vector<int> criticalCustomers;
-    for (const auto& v : s.vehicles) {
-        if (std::fabs(v.completionTime - makespan) <= EPS) {
-            for (const auto& t : v.trips) {
+    for (const auto& vp : s.vehicles) {
+        if (std::fabs(vp->completionTime - makespan) <= EPS) {
+            for (const auto& t : vp->trips) {
                 for (int cid : t.customers) criticalCustomers.push_back(cid);
             }
         }
@@ -65,7 +65,17 @@ inline std::vector<int> selectRuinCustomers(const Instance& inst, const Solution
 
 inline void removeCustomersFromSolution(Solution& s, const std::vector<int>& customerIds) {
     std::set<int> toRemove(customerIds.begin(), customerIds.end());
-    for (auto& v : s.vehicles) {
+    for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) {
+        bool touches = false;
+        for (const auto& t : s.vehicles[vi]->trips) {
+            for (int cid : t.customers) {
+                if (toRemove.count(cid)) { touches = true; break; }
+            }
+            if (touches) break;
+        }
+        if (!touches) continue; // vehicle không có khách nào bị loại -> không cần clone
+
+        Vehicle& v = s.detachVehicle(vi);
         for (auto& t : v.trips) {
             std::vector<int> kept;
             kept.reserve(t.customers.size());
@@ -120,14 +130,14 @@ inline RuinRecreateResult ruinRecreate(const Instance& inst, const Solution& cur
             bool hasNonFirstTruckOption = false;
             for (const auto& im : insertions) {
                 int vi = findVehicleIndexById(partial, im.targetVehicleId);
-                bool isFirstTruck = (vi == 0 && partial.vehicles[vi].type == VehicleType::TRUCK);
+                bool isFirstTruck = (vi == 0 && partial.vehicles[vi]->type == VehicleType::TRUCK);
                 if (!isFirstTruck) { hasNonFirstTruckOption = true; break; }
             }
 
             std::vector<InsertionCandidate> evaluatedInsertions;
             for (const auto& im : insertions) {
                 int vi = findVehicleIndexById(partial, im.targetVehicleId);
-                bool isFirstTruck = (vi == 0 && partial.vehicles[vi].type == VehicleType::TRUCK);
+                bool isFirstTruck = (vi == 0 && partial.vehicles[vi]->type == VehicleType::TRUCK);
                 if (hasNonFirstTruckOption && isFirstTruck) continue; // tránh ép vào trucks[0] nếu có lựa chọn khác
 
                 InsertionCandidate cand = evaluateInsertion(inst, partial, im, lambda, H, baselineDistance);

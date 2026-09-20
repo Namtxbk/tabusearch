@@ -94,8 +94,12 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
             if (rr.success) {
                 current = rr.solution;
                 tabuList.clear();
-                hDiv = 0;
             }
+            // Luôn reset hDiv sau 1 lần thử (kể cả thất bại) — nếu không, khi ruinRecreate thất bại
+            // hDiv vẫn >= ngưỡng nên vòng lặp SAU sẽ lại rơi vào đúng nhánh này, thử lại mãi mãi và
+            // không bao giờ quay lại tìm kiếm bình thường (buildCandidatePool) nữa trong suốt phần
+            // thời gian còn lại — bug khiến search bị "kẹt" khi hạ diversificationStagnation xuống thấp.
+            hDiv = 0;
 
             bool improved = updateBestSolutions(current, bestFeasible, bestInfeasible);
             if (improved) hStop = 0; else hStop += 1;

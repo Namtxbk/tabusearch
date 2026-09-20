@@ -35,7 +35,7 @@ inline std::vector<InsertionMove> generateAllInsertions(const Instance& inst, co
     std::vector<InsertionMove> moves;
 
     for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) {
-        const Vehicle& v = s.vehicles[vi];
+        const Vehicle& v = *s.vehicles[vi];
         if (!staticCompatible(inst, custId, v)) continue;
 
         bool isFirstTruck = (v.type == VehicleType::TRUCK) && (vi == 0);
@@ -73,7 +73,7 @@ inline std::vector<InsertionMove> generateAllInsertions(const Instance& inst, co
 
 inline void applyInsertion(Solution& s, const InsertionMove& im) {
     int vi = findVehicleIndexById(s, im.targetVehicleId);
-    Vehicle& v = s.vehicles[vi];
+    Vehicle& v = s.detachVehicle(vi);
 
     if (im.targetTripIndex == -1) {
         Trip newTrip;
@@ -109,14 +109,16 @@ inline InsertionCandidate evaluateInsertion(const Instance& inst, const Solution
 
     int vi = findVehicleIndexById(sPrime, im.targetVehicleId);
     if (vi < 0) { result.valid = false; return result; }
-    recomputeVehicle(inst, sPrime.vehicles[vi], 0);
+    recomputeVehicle(inst, sPrime.detachVehicle(vi), 0);
 
     if (violatesStructuralConstraint(inst, sPrime, /*forceAllCustomersPresent=*/false)) {
         result.valid = false;
         return result;
     }
 
-    evaluateSolution(inst, sPrime, lambda, H);
+    // Chỉ vehicle vi vừa được recompute — các vehicle khác giữ nguyên từ s (đã đúng từ trước),
+    // nên chỉ cần tổng hợp lại số liệu thay vì recompute toàn bộ solution (evaluateSolution).
+    aggregateSolutionMetrics(inst, sPrime, lambda, H);
 
     result.valid = true;
     result.solution = std::move(sPrime);
@@ -129,9 +131,9 @@ inline InsertionCandidate evaluateInsertion(const Instance& inst, const Solution
     // định nghĩa compute ΔTW(a) trong tài liệu: chỉ xét khách ĐÃ ĐƯỢC CHÈN (tức là khách vừa thêm).
     const Customer& c = inst.node(im.customerId);
     const Trip& targetTrip = (im.targetTripIndex == -1)
-        ? result.solution.vehicles[vi].trips[std::min(im.insertionPosition, (int)result.solution.vehicles[vi].trips.size() - 1)]
-        : result.solution.vehicles[vi].trips[im.targetTripIndex];
-    double arrival = targetTrip.arrivalTime.count(im.customerId) ? targetTrip.arrivalTime.at(im.customerId) : 0.0;
+        ? result.solution.vehicles[vi]->trips[std::min(im.insertionPosition, (int)result.solution.vehicles[vi]->trips.size() - 1)]
+        : result.solution.vehicles[vi]->trips[im.targetTripIndex];
+    double arrival = targetTrip.arrivalOf(im.customerId);
     double penalty = std::max(0.0, arrival - c.due);
     result.deltaTW = penalty;
     result.feasibleNoAdditionalTW = (penalty <= EPS);
@@ -144,15 +146,15 @@ inline Solution buildEmptySolution(const Instance& inst) {
     Solution s;
     int nextVehicleId = 0;
     for (int i = 0; i < inst.num_trucks; ++i) {
-        Vehicle v;
-        v.id = nextVehicleId++;
-        v.type = VehicleType::TRUCK;
+        auto v = std::make_shared<Vehicle>();
+        v->id = nextVehicleId++;
+        v->type = VehicleType::TRUCK;
         s.vehicles.push_back(v);
     }
     for (int i = 0; i < inst.num_drones; ++i) {
-        Vehicle v;
-        v.id = nextVehicleId++;
-        v.type = VehicleType::DRONE;
+        auto v = std::make_shared<Vehicle>();
+        v->id = nextVehicleId++;
+        v->type = VehicleType::DRONE;
         s.vehicles.push_back(v);
     }
     return s;
@@ -212,10 +214,10 @@ inline Solution buildInitialSolution(const Instance& inst, const PenaltyWeights&
         // Nếu không có move nào hợp lệ (rất hiếm với move rỗng luôn khả dụng), bỏ qua khách này.
     }
 
-    for (auto& v : s.vehicles) recomputeVehicleFull(inst, v);
+    for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) recomputeVehicleFull(inst, s.detachVehicle(vi));
 
     double maxCompletion = 0.0;
-    for (const auto& v : s.vehicles) maxCompletion = std::max(maxCompletion, v.completionTime);
+    for (const auto& v : s.vehicles) maxCompletion = std::max(maxCompletion, v->completionTime);
     outH = computeH(inst, maxCompletion);
 
     return s;

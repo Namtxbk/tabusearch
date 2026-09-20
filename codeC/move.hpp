@@ -2,11 +2,10 @@
 // Định nghĩa các loại move (mục 6) và thuộc tính tabu (mục 9).
 #pragma once
 
-#include <string>
 #include <vector>
 #include <set>
 #include <cstdint>
-#include <sstream>
+#include <functional>
 
 enum class MoveType {
     Relocate,
@@ -65,37 +64,80 @@ struct Move {
 // Thuộc tính phân công: ("ASSIGN", customerId, forbiddenVehicleId)
 // Thuộc tính thứ tự trip: ("TRIP_RETURN", tripUid, sourceVehicleId, sourcePredecessorTripUid)
 //
-// Ta biểu diễn mỗi thuộc tính dưới dạng 1 chuỗi (string key) để dễ dùng làm khóa hash.
+// Trước đây dựng key dạng string qua ostringstream (formatting/locale khá chậm, gọi trên mọi
+// candidate). Thay bằng key số nguyên thuần (kind + tối đa 4 trường) — cùng ngữ nghĩa phân biệt
+// thuộc tính, chỉ khác cách biểu diễn để so sánh/hash rẻ hơn.
+enum class TabuAttrKind { Arc, Assign, TripReturn };
+
 struct TabuAttribute {
-    std::string key;
-    bool operator==(const TabuAttribute& o) const { return key == o.key; }
-    bool operator<(const TabuAttribute& o) const { return key < o.key; }
+    TabuAttrKind kind = TabuAttrKind::Arc;
+    long long a = 0, b = 0, c = 0;
+
+    bool operator==(const TabuAttribute& o) const {
+        return kind == o.kind && a == o.a && b == o.b && c == o.c;
+    }
+    bool operator<(const TabuAttribute& o) const {
+        if (kind != o.kind) return kind < o.kind;
+        if (a != o.a) return a < o.a;
+        if (b != o.b) return b < o.b;
+        return c < o.c;
+    }
+};
+
+struct TabuAttributeHash {
+    std::size_t operator()(const TabuAttribute& t) const noexcept {
+        std::size_t h = std::hash<int>{}(static_cast<int>(t.kind));
+        auto mix = [&h](long long v) {
+            std::size_t hv = std::hash<long long>{}(v);
+            h ^= hv + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
+        };
+        mix(t.a); mix(t.b); mix(t.c);
+        return h;
+    }
 };
 
 inline TabuAttribute arcAttribute(int vehicleId, int fromNode, int toNode) {
-    std::ostringstream oss;
-    oss << "ARC|" << vehicleId << "|" << fromNode << "|" << toNode;
-    return TabuAttribute{oss.str()};
+    return TabuAttribute{TabuAttrKind::Arc, vehicleId, fromNode, toNode};
 }
 
 inline TabuAttribute assignAttribute(int customerId, int forbiddenVehicleId) {
-    std::ostringstream oss;
-    oss << "ASSIGN|" << customerId << "|" << forbiddenVehicleId;
-    return TabuAttribute{oss.str()};
+    return TabuAttribute{TabuAttrKind::Assign, customerId, forbiddenVehicleId, 0};
 }
 
 inline TabuAttribute tripReturnAttribute(std::uint64_t tripUid, int sourceVehicleId, std::uint64_t sourcePredecessorTripUid) {
-    std::ostringstream oss;
-    oss << "TRIP_RETURN|" << tripUid << "|" << sourceVehicleId << "|" << sourcePredecessorTripUid;
-    return TabuAttribute{oss.str()};
+    return TabuAttribute{TabuAttrKind::TripReturn, static_cast<long long>(tripUid), sourceVehicleId,
+                          static_cast<long long>(sourcePredecessorTripUid)};
 }
 
-using AttributeSet = std::set<TabuAttribute>;
+// AttributeSet trước đây là std::set<TabuAttribute> (cây đỏ-đen, cấp phát 1 node/phần tử) —
+// nhưng mỗi tập chỉ có vài chục phần tử (arc của 1-2 trip bị move đụng tới) và được dựng LẶP LẠI
+// (2 lần: old + new attribute) trên MỌI candidate. Với kích thước nhỏ như vậy, vector + scan tuyến
+// tính nhanh hơn nhiều (không cấp phát heap cho từng phần tử, cache-friendly hơn cây).
+class AttributeSet {
+public:
+    void insert(const TabuAttribute& a) {
+        if (!contains(a)) items_.push_back(a);
+    }
+    bool contains(const TabuAttribute& a) const {
+        for (const auto& x : items_) {
+            if (x == a) return true;
+        }
+        return false;
+    }
+    bool empty() const { return items_.empty(); }
+    std::size_t size() const { return items_.size(); }
+
+    std::vector<TabuAttribute>::const_iterator begin() const { return items_.begin(); }
+    std::vector<TabuAttribute>::const_iterator end() const { return items_.end(); }
+
+private:
+    std::vector<TabuAttribute> items_;
+};
 
 inline AttributeSet setDifference(const AttributeSet& a, const AttributeSet& b) {
     AttributeSet result;
     for (const auto& x : a) {
-        if (b.find(x) == b.end()) result.insert(x);
+        if (!b.contains(x)) result.insert(x);
     }
     return result;
 }

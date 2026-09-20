@@ -58,7 +58,9 @@ inline void recomputeVehicle(const Instance& inst, Vehicle& v, int firstAffected
         trip.travelDistance = 0.0;
         trip.flightTime = 0.0;
         trip.arrivalTime.clear();
+        trip.arrivalTime.reserve(trip.customers.size());
         trip.waitingTime.clear();
+        trip.waitingTime.reserve(trip.customers.size());
 
         int previousNode = 0; // depot
         double t = trip.startTime;
@@ -68,7 +70,7 @@ inline void recomputeVehicle(const Instance& inst, Vehicle& v, int firstAffected
             double legTime = inst.travelTime(previousNode, custId, isDrone);
             t += legTime;
             t = std::max(t, cust.ready);           // a_i = max{e_i, prev + tau}
-            trip.arrivalTime[custId] = t;
+            trip.arrivalTime.push_back(t);
             trip.load += cust.demand;
             trip.travelDistance += inst.dist(previousNode, custId);
             trip.flightTime += legTime;
@@ -83,8 +85,8 @@ inline void recomputeVehicle(const Instance& inst, Vehicle& v, int firstAffected
         trip.travelDistance += inst.dist(previousNode, 0);
         trip.returnTime = t;
 
-        for (int custId : trip.customers) {
-            trip.waitingTime[custId] = trip.returnTime - trip.arrivalTime[custId];
+        for (double arrival : trip.arrivalTime) {
+            trip.waitingTime.push_back(trip.returnTime - arrival);
         }
 
         currentTime = trip.returnTime;

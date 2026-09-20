@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <algorithm>
+#include <memory>
 #include "instance.hpp"
 
 enum class VehicleType { TRUCK, DRONE };
@@ -25,9 +26,19 @@ struct Trip {
                                      // (drone_range là giới hạn THỜI GIAN BAY, không phải quãng đường).
                                      // Với truck, trường này không dùng để kiểm tra ràng buộc gì nhưng vẫn được tính cho đầy đủ.
 
-    // arrivalTime / waitingTime theo customer id (1-based) chỉ cho khách trong trip này
-    std::unordered_map<int, double> arrivalTime;
-    std::unordered_map<int, double> waitingTime;
+    // arrivalTime / waitingTime song song với customers theo VỊ TRÍ (không phải customer id) —
+    // dùng vector thay vì unordered_map để tránh cấp phát heap theo từng phần tử khi copy Trip
+    // (mỗi candidate move đánh giá đều copy Solution, nên chi phí cấp phát này lặp lại rất nhiều lần).
+    std::vector<double> arrivalTime;
+    std::vector<double> waitingTime;
+
+    // Tra cứu thời điểm đến của customerId trong trip này (O(độ dài trip), trip thường ngắn).
+    double arrivalOf(int customerId) const {
+        for (std::size_t i = 0; i < customers.size(); ++i) {
+            if (customers[i] == customerId) return arrivalTime[i];
+        }
+        return 0.0;
+    }
 
     bool empty() const { return customers.empty(); }
 };
@@ -44,7 +55,21 @@ struct Vehicle {
 };
 
 struct Solution {
-    std::vector<Vehicle> vehicles;
+    // shared_ptr<Vehicle> thay vì Vehicle theo giá trị: copy Solution (Solution sPrime = s;) khi đó
+    // chỉ copy các con trỏ (O(số vehicle)) thay vì deep-copy TOÀN BỘ khách của mọi vehicle mỗi lần —
+    // mỗi candidate move được đánh giá đều copy cả Solution nên chi phí này lặp lại rất nhiều lần.
+    // BẮT BUỘC: trước khi mutate 1 vehicle, phải gọi detachVehicle(idx) để "tách riêng" (clone) nó
+    // ra khỏi các Solution khác đang chia sẻ chung con trỏ — nếu không sẽ làm hỏng solution khác.
+    std::vector<std::shared_ptr<Vehicle>> vehicles;
+
+    // Đảm bảo vehicles[idx] không bị chia sẻ với Solution nào khác rồi trả về tham chiếu mutable.
+    // Chỉ thực sự clone khi cần (use_count() > 1); gọi lại nhiều lần trên cùng idx không tốn thêm.
+    Vehicle& detachVehicle(int idx) {
+        if (vehicles[idx].use_count() > 1) {
+            vehicles[idx] = std::make_shared<Vehicle>(*vehicles[idx]);
+        }
+        return *vehicles[idx];
+    }
 
     double makespan = 0.0;             // C_max(s)
     double normalizedMakespan = 0.0;   // C_max(s) / H
