@@ -22,19 +22,19 @@ inline std::vector<Candidate> buildCandidatePool(const Instance& inst, const Sol
 
     std::vector<Move> rawMoves;
 
-    auto relocateMoves = generateRelocateMoves(inst, current, comp.selectedCustomers);
+    auto relocateMoves = generateRelocateMoves(inst, current, comp.selectedCustomers, rng);
     rawMoves.insert(rawMoves.end(), relocateMoves.begin(), relocateMoves.end());
 
-    auto orOpt2Moves = generateOrOpt2Moves(inst, current, comp.selectedTrips);
+    auto orOpt2Moves = generateOrOpt2Moves(inst, current, comp.selectedTrips, rng);
     rawMoves.insert(rawMoves.end(), orOpt2Moves.begin(), orOpt2Moves.end());
 
-    auto swapMoves = generateSwapMoves(inst, current, comp.selectedCustomers);
+    auto swapMoves = generateSwapMoves(inst, current, comp.selectedCustomers, rng);
     rawMoves.insert(rawMoves.end(), swapMoves.begin(), swapMoves.end());
 
     auto twoOptMoves = generateTwoOptMoves(inst, current, comp.selectedTrips);
     rawMoves.insert(rawMoves.end(), twoOptMoves.begin(), twoOptMoves.end());
 
-    auto crossTripMoves = generateCrossTripMoves(inst, current, comp.selectedTrips);
+    auto crossTripMoves = generateCrossTripMoves(inst, current, comp.selectedTrips, rng);
     rawMoves.insert(rawMoves.end(), crossTripMoves.begin(), crossTripMoves.end());
 
     auto tripRelocateMoves = generateTripRelocateMoves(inst, current, comp.selectedTrips);

@@ -16,11 +16,11 @@ struct SearchComponents {
 
 // Đóng góp của 1 khách vào V_TW, dùng để rank khi chưa có nghiệm khả thi.
 inline double customerTWContribution(const Instance& inst, const Solution& s, int custId) {
-    for (const auto& v : s.vehicles) {
-        for (const auto& t : v.trips) {
+    for (const auto& vp : s.vehicles) {
+        for (const auto& t : vp->trips) {
             auto it = std::find(t.customers.begin(), t.customers.end(), custId);
             if (it != t.customers.end()) {
-                double arrival = t.arrivalTime.at(custId);
+                double arrival = t.arrivalTime[it - t.customers.begin()];
                 double due = inst.node(custId).due;
                 double tw = std::max(0.0, arrival - due);
                 double wait = std::max(0.0, (t.returnTime - arrival) - inst.max_wait);
@@ -36,7 +36,7 @@ inline std::vector<std::pair<int,int>> tripsContainingCustomers(const Solution& 
     std::set<std::pair<int,int>> seen;
     for (int cid : custIds) {
         for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) {
-            const Vehicle& v = s.vehicles[vi];
+            const Vehicle& v = *s.vehicles[vi];
             for (int ti = 0; ti < static_cast<int>(v.trips.size()); ++ti) {
                 const auto& t = v.trips[ti];
                 if (std::find(t.customers.begin(), t.customers.end(), cid) != t.customers.end()) {
@@ -52,7 +52,7 @@ inline std::vector<std::pair<int,int>> tripsContainingCustomers(const Solution& 
 inline std::vector<std::pair<int,int>> allTrips(const Solution& s) {
     std::vector<std::pair<int,int>> result;
     for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) {
-        for (int ti = 0; ti < static_cast<int>(s.vehicles[vi].trips.size()); ++ti) {
+        for (int ti = 0; ti < static_cast<int>(s.vehicles[vi]->trips.size()); ++ti) {
             result.push_back({vi, ti});
         }
     }
@@ -81,7 +81,8 @@ inline SearchComponents selectSearchComponents(const Instance& inst, const Solut
         for (int i = 0; i < topCount && i < n; ++i) chosen.insert(scored[i].second);
 
         // Khách thuộc trip vượt tải hoặc drone vượt tầm bay
-        for (const auto& v : s.vehicles) {
+        for (const auto& vp : s.vehicles) {
+            const Vehicle& v = *vp;
             for (const auto& t : v.trips) {
                 bool overCap = t.load > v.capacity(inst) + EPS;
                 bool overRange = (v.type == VehicleType::DRONE) && (t.travelDistance > inst.drone_range + EPS);
@@ -103,16 +104,16 @@ inline SearchComponents selectSearchComponents(const Instance& inst, const Solut
     } else {
         double currentMakespan = s.makespan;
         std::set<int> criticalVehicleIds;
-        for (const auto& v : s.vehicles) {
-            if (std::fabs(v.completionTime - currentMakespan) <= EPS) {
-                criticalVehicleIds.insert(v.id);
+        for (const auto& vp : s.vehicles) {
+            if (std::fabs(vp->completionTime - currentMakespan) <= EPS) {
+                criticalVehicleIds.insert(vp->id);
             }
         }
 
         std::set<int> chosenCustomers;
         std::set<std::pair<int,int>> chosenTrips;
         for (int vi = 0; vi < static_cast<int>(s.vehicles.size()); ++vi) {
-            const Vehicle& v = s.vehicles[vi];
+            const Vehicle& v = *s.vehicles[vi];
             if (!criticalVehicleIds.count(v.id)) continue;
             for (int ti = 0; ti < static_cast<int>(v.trips.size()); ++ti) {
                 chosenTrips.insert({vi, ti});

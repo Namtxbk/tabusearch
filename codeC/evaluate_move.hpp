@@ -30,21 +30,32 @@ struct Candidate {
 // solution đã đủ mọi khách); false khi kiểm tra solution BỘ PHẬN trong quá trình construction/insertion
 // (khi đó ta chỉ cần đảm bảo KHÔNG xuất hiện >1 lần và tương thích tĩnh, không cần đã đủ mọi khách).
 inline bool violatesStructuralConstraint(const Instance& inst, const Solution& s, bool forceAllCustomersPresent = true) {
-    std::set<int> seen;
     int totalCustomers = inst.numCustomers();
 
-    for (const auto& v : s.vehicles) {
+    // Buffer tái sử dụng giữa các lần gọi (hàm này chạy trên MỌI candidate) — vector<char> đánh dấu
+    // theo id thay cho std::set<int> tránh cấp phát 1 node cây cho mỗi khách mỗi candidate.
+    static std::vector<char> seen;
+    if (static_cast<int>(seen.size()) < totalCustomers + 1) {
+        seen.assign(totalCustomers + 1, 0);
+    } else {
+        std::fill(seen.begin(), seen.begin() + totalCustomers + 1, 0);
+    }
+
+    int seenCount = 0;
+    for (const auto& vp : s.vehicles) {
+        const Vehicle& v = *vp;
         for (const auto& t : v.trips) {
             for (int custId : t.customers) {
-                if (seen.count(custId)) return true; // xuất hiện > 1 lần
-                seen.insert(custId);
+                if (custId < 0 || custId > totalCustomers || seen[custId]) return true; // xuất hiện > 1 lần
+                seen[custId] = 1;
+                ++seenCount;
 
                 if (!staticCompatible(inst, custId, v)) return true; // không tương thích tĩnh
             }
         }
     }
 
-    if (forceAllCustomersPresent && static_cast<int>(seen.size()) != totalCustomers) return true; // thiếu khách (0 lần)
+    if (forceAllCustomersPresent && seenCount != totalCustomers) return true; // thiếu khách (0 lần)
 
     return false;
 }
@@ -59,8 +70,8 @@ inline AttributeSet extractTabuAttributes(const Instance& /*inst*/, const Soluti
     if (m.type == MoveType::Swap) {
         CustomerLocation locI = locateCustomer(s, m.customerId);
         CustomerLocation locJ = locateCustomer(s, m.customerId2);
-        if (locI.found) vehicleIds.push_back(s.vehicles[locI.vehicleIdx].id);
-        if (locJ.found) vehicleIds.push_back(s.vehicles[locJ.vehicleIdx].id);
+        if (locI.found) vehicleIds.push_back(s.vehicles[locI.vehicleIdx]->id);
+        if (locJ.found) vehicleIds.push_back(s.vehicles[locJ.vehicleIdx]->id);
     } else {
         vehicleIds = affectedVehicleIds(m);
     }
@@ -79,8 +90,8 @@ inline AttributeSet extractTabuAttributes(const Instance& /*inst*/, const Soluti
         CustomerLocation locI = locateCustomer(s, m.customerId);
         CustomerLocation locJ = locateCustomer(s, m.customerId2);
         if (locI.found && locJ.found) {
-            int vehI = s.vehicles[locI.vehicleIdx].id;
-            int vehJ = s.vehicles[locJ.vehicleIdx].id;
+            int vehI = s.vehicles[locI.vehicleIdx]->id;
+            int vehJ = s.vehicles[locJ.vehicleIdx]->id;
             if (vehI != vehJ) {
                 attrs.insert(assignAttribute(m.customerId, vehI));
                 attrs.insert(assignAttribute(m.customerId2, vehJ));
@@ -91,8 +102,8 @@ inline AttributeSet extractTabuAttributes(const Instance& /*inst*/, const Soluti
             // Thuộc tính thứ tự trip: (TRIP_RETURN, tripUid, sourceVehicleId, sourcePredecessorTripUid)
             int srcVi = findVehicleIndexById(s, m.sourceVehicleId);
             std::uint64_t predUid = 0;
-            if (srcVi >= 0 && m.sourceTripIndex > 0 && m.sourceTripIndex - 1 < static_cast<int>(s.vehicles[srcVi].trips.size())) {
-                predUid = s.vehicles[srcVi].trips[m.sourceTripIndex - 1].uid;
+            if (srcVi >= 0 && m.sourceTripIndex > 0 && m.sourceTripIndex - 1 < static_cast<int>(s.vehicles[srcVi]->trips.size())) {
+                predUid = s.vehicles[srcVi]->trips[m.sourceTripIndex - 1].uid;
             }
             attrs.insert(tripReturnAttribute(m.tripUid, m.sourceVehicleId, predUid));
         }
@@ -124,8 +135,8 @@ inline Candidate evaluateMove(const Instance& inst, const Solution& s, const Mov
         // với swap, các vehicle liên quan xác định trên sPrime SAU khi áp dụng (vị trí không đổi vehicle)
         CustomerLocation locI = locateCustomer(sPrime, m.customerId);
         CustomerLocation locJ = locateCustomer(sPrime, m.customerId2);
-        if (locI.found) touched.push_back(sPrime.vehicles[locI.vehicleIdx].id);
-        if (locJ.found) touched.push_back(sPrime.vehicles[locJ.vehicleIdx].id);
+        if (locI.found) touched.push_back(sPrime.vehicles[locI.vehicleIdx]->id);
+        if (locJ.found) touched.push_back(sPrime.vehicles[locJ.vehicleIdx]->id);
     } else {
         touched = affectedVehicleIds(m);
     }
@@ -133,10 +144,12 @@ inline Candidate evaluateMove(const Instance& inst, const Solution& s, const Mov
     for (int vid : touched) {
         int vi = findVehicleIndexById(sPrime, vid);
         if (vi < 0) continue;
-        recomputeVehicle(inst, sPrime.vehicles[vi], 0); // an toàn: tính lại toàn bộ trip của vehicle bị ảnh hưởng
+        recomputeVehicle(inst, sPrime.detachVehicle(vi), 0); // an toàn: tính lại toàn bộ trip của vehicle bị ảnh hưởng
     }
 
-    evaluateSolution(inst, sPrime, lambda, H);
+    // Chỉ vehicle trong "touched" vừa được recompute — các vehicle còn lại giữ nguyên lịch trình
+    // cũ (không đổi), nên chỉ cần tổng hợp lại số liệu, KHÔNG recompute toàn bộ solution.
+    aggregateSolutionMetrics(inst, sPrime, lambda, H);
 
     if (sPrime.totalViolation > maxAllowedInfeasibility) {
         result.valid = false;
