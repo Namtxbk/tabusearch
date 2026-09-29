@@ -348,39 +348,57 @@ Riêng $h_{\text{div}}$ (bộ đếm đa dạng hóa) được đặt lại về
 
 \subsection{Pseudocode}
 
-\begin{algorithm}[H]
-\caption{Adaptive Tabu Search với Strategic Oscillation}
-\label{alg:ts}
-\KwIn{Lời giải ban đầu $s_0$, hằng số $H$, tham số $(N_{\max}, H_{\text{stop}}, H_{\text{div}}, \tau_0, L_\lambda, T_{\text{lim}})$}
+% --- Phần 1: Khởi tạo và nhánh đa dạng hóa ---
+\begin{algorithm}[ht]
+\caption{Adaptive Tabu Search (Phần 1/2): Khởi tạo và đa dạng hóa}
+\label{alg:ts1}
+\KwIn{$s_0$, $H$, tham số $(N_{\max}, H_{\text{stop}}, H_{\text{div}}, \tau_0, L_\lambda, T_{\text{lim}})$}
 \KwOut{Lời giải tốt nhất $s^*$}
 $s \leftarrow s_0$;\quad $\lambda \leftarrow (1,1,1,1)$;\quad Tính $F_\lambda(s_0)$\;
-\eIf{$s_0$ khả thi}{$s^*_F \leftarrow s_0$;\quad $s^*_I \leftarrow \emptyset$\;}{$s^*_F \leftarrow \emptyset$;\quad $s^*_I \leftarrow s_0$\;}
-Khởi tạo danh sách Tabu $\mathcal{T} \leftarrow \emptyset$;\quad $h_{\text{div}} \leftarrow 0$;\quad $h_{\text{stop}} \leftarrow 0$;\quad $\text{counts} \leftarrow \mathbf{0}$\;
+\eIf{$s_0$ khả thi}{%
+    $s^*_F \leftarrow s_0$;\quad $s^*_I \leftarrow \emptyset$\;%
+}{%
+    $s^*_F \leftarrow \emptyset$;\quad $s^*_I \leftarrow s_0$\;%
+}
+$\mathcal{T} \leftarrow \emptyset$;\quad $h_{\text{div}} \leftarrow 0$;\quad $h_{\text{stop}} \leftarrow 0$;\quad $\text{counts} \leftarrow \mathbf{0}$\;
 \For{$\mathit{iter} = 1$ \KwTo $N_{\max}$}{
     \If{$h_{\text{stop}} \geq H_{\text{stop}}$ \upshape\textbf{hoặc} thời gian $> T_{\text{lim}}$}{\textbf{break}\;}
-    \tcp{Đa dạng hóa khi bị kẹt}
     \If{$h_{\text{div}} \geq H_{\text{div}}$}{
         $\mathit{rr} \leftarrow \textsc{RuinRecreate}(s, \lambda, s^*_F, H)$\;
-        \If{$\mathit{rr}.\mathit{success}$}{$s \leftarrow \mathit{rr}.\mathit{solution}$;\quad $\mathcal{T} \leftarrow \emptyset$;\quad $h_{\text{div}} \leftarrow 0$\;}
-        Cập nhật $s^*_F$, $s^*_I$ từ $s$;\quad cập nhật $h_{\text{stop}}$\;
-        \textbf{continue}\;
+        \If{$\mathit{rr}.\mathit{success}$}{%
+            $s \leftarrow \mathit{rr}.\mathit{solution}$;\quad $\mathcal{T} \leftarrow \emptyset$;\quad $h_{\text{div}} \leftarrow 0$\;%
+        }
+        Cập nhật $s^*_F$, $s^*_I$ từ $s$; nếu cải thiện thì $h_{\text{stop}} \leftarrow 0$, ngược lại $h_{\text{stop}} \mathrel{+}= 1$\;
+        \textbf{continue} \tcp*{sang vòng lặp tiếp theo (xem Phần 2/2)}
     }
-    \tcp{Sinh và lọc pool ứng viên}
-    $\mathit{pool} \leftarrow \textsc{BuildCandidatePool}(s, s^*_F, \lambda, H)$\;
-    $\mathit{admissible} \leftarrow \{c \in \mathit{pool} \mid \neg\textsc{IsTabu}(c, \mathcal{T}, \mathit{iter})\ \mathbf{or}\ \textsc{Aspiration}(c, s^*_F, s^*_I)\}$\;
-    \If{$\mathit{admissible} = \emptyset$}{
-        Giải phóng sớm khóa tabu hết hạn sớm nhất; $\mathit{admissible} \leftarrow \mathit{pool}$\;
-        \If{$\mathit{admissible} = \emptyset$}{$h_{\text{div}} \leftarrow H_{\text{div}}$;\quad \textbf{continue}\;}
-    }
-    $c^* \leftarrow \textsc{SelectBestCandidate}(\mathit{admissible}, s^*_F)$\;
-    $s \leftarrow c^*.\mathit{solution}$;\quad $\textsc{RegisterTabu}(c^*, \mathcal{T}, \mathit{iter}, \tau_0)$\;
-    \tcp{Cập nhật nghiệm tốt nhất}
-    \eIf{\upshape cập nhật $s^*_F$ hoặc $s^*_I$ thành công}{$h_{\text{div}} \leftarrow 0$;\quad $h_{\text{stop}} \leftarrow 0$\;}{$h_{\text{div}} \mathrel{+}= 1$;\quad $h_{\text{stop}} \mathrel{+}= 1$\;}
-    \tcp{Thống kê khả thi cho Strategic Oscillation}
-    Cập nhật $\text{counts}$ từ $s$\;
-    \If{$\mathit{iter} \bmod L_\lambda = 0$}{$\textsc{UpdatePenalties}(\lambda, \text{counts})$;\quad $\text{counts} \leftarrow \mathbf{0}$\;}
+    \tcp{Xử lý vòng lặp thông thường --- xem Phần 2/2 (Thuật toán~\ref{alg:ts2})}
+    \BlankLine
 }
-\Return $s^*_F \neq \emptyset$ ? $s^*_F$ : $s^*_I$\;
+\Return $s^*_F \neq \emptyset$ \upshape? $s^*_F$ : $s^*_I$\;
+\end{algorithm}
+
+% --- Phần 2: Thân vòng lặp thông thường ---
+\begin{algorithm}[ht]
+\caption{Adaptive Tabu Search (Phần 2/2): Thân vòng lặp thông thường}
+\label{alg:ts2}
+\tcp{Tiếp nối từ Thuật toán~\ref{alg:ts1}, mỗi vòng không vào nhánh đa dạng hóa}
+$\mathit{pool} \leftarrow \textsc{BuildCandidatePool}(s, s^*_F, \lambda, H)$\;
+$\mathit{adm} \leftarrow \{c \in \mathit{pool} \mid \neg\textsc{IsTabu}(c,\mathcal{T},\mathit{iter})\ \mathbf{or}\ \textsc{Aspiration}(c, s^*_F, s^*_I)\}$\;
+\If{$\mathit{adm} = \emptyset$}{
+    Giải phóng sớm khóa Tabu hết hạn sớm nhất;\quad $\mathit{adm} \leftarrow \mathit{pool}$\;
+    \If{$\mathit{adm} = \emptyset$}{$h_{\text{div}} \leftarrow H_{\text{div}}$;\quad \textbf{continue}\;}
+}
+$c^* \leftarrow \textsc{SelectBestCandidate}(\mathit{adm},\, s^*_F)$\;
+$s \leftarrow c^*.\mathit{solution}$;\quad $\textsc{RegisterTabu}(c^*, \mathcal{T}, \mathit{iter}, \tau_0)$\;
+\eIf{\upshape cập nhật $s^*_F$ hoặc $s^*_I$ từ $s$ thành công}{%
+    $h_{\text{div}} \leftarrow 0$;\quad $h_{\text{stop}} \leftarrow 0$\;%
+}{%
+    $h_{\text{div}} \mathrel{+}= 1$;\quad $h_{\text{stop}} \mathrel{+}= 1$\;%
+}
+Cập nhật $\text{counts}_{Q,D,TW,W}$ từ trạng thái vi phạm của $s$\;
+\If{$\mathit{iter} \bmod L_\lambda = 0$}{%
+    $\textsc{UpdatePenalties}(\lambda, \text{counts})$;\quad $\text{counts} \leftarrow \mathbf{0}$\;%
+}
 \end{algorithm}
 
 \end{document}
