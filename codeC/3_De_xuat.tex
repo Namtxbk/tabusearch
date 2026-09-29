@@ -1,0 +1,386 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+% ============================================================
+\section{Tổng quan giải pháp}
+% ============================================================
+
+Giải pháp đề xuất giải quyết bài toán MVRPD-TW Multi-Trip theo hai giai đoạn tuần tự: \textbf{(1) xây dựng lời giải ban đầu} bằng thuật toán Greedy Insertion và \textbf{(2) cải thiện lời giải} bằng Adaptive Tabu Search tích hợp cơ chế Strategic Oscillation và đa dạng hóa Ruin \& Recreate. Luồng hoạt động tổng thể được mô tả trong Hình~\ref{fig:flowchart}.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    node distance=1.3cm and 2.2cm,
+    box/.style={rectangle, rounded corners=4pt, draw=black, fill=blue!10,
+                text width=5.2cm, align=center, minimum height=1cm, font=\small},
+    decision/.style={diamond, draw=black, fill=orange!20, aspect=2.5,
+                     text width=3.2cm, align=center, font=\small},
+    arrow/.style={-Stealth, thick},
+]
+\node[box] (input)   {Đọc dữ liệu đầu vào\\(tọa độ, TW, năng lực xe)};
+\node[box, below=of input]  (sort)   {Sắp xếp khách theo $l_i$ tăng dần (EDD)};
+\node[box, below=of sort]   (greedy) {Greedy Insertion\\(sinh tất cả moves, chọn tốt nhất)};
+\node[box, below=of greedy] (init)   {Lời giải ban đầu $s_0$; tính $H$};
+\node[box, below=of init]   (ts)     {Adaptive Tabu Search\\+ Strategic Oscillation};
+\node[decision, below=of ts](stop)   {Điều kiện\\dừng?};
+\node[box, below=of stop]   (output) {Xuất lời giải tốt nhất $s^*$};
+
+\draw[arrow] (input)   -- (sort);
+\draw[arrow] (sort)    -- (greedy);
+\draw[arrow] (greedy)  -- (init);
+\draw[arrow] (init)    -- (ts);
+\draw[arrow] (ts)      -- (stop);
+\draw[arrow] (stop)    -- node[right, font=\small]{Có} (output);
+\draw[arrow] (stop.east) -- ++(2,0) |- node[above, font=\small]{Không} (ts.east);
+\end{tikzpicture}
+\caption{Luồng hoạt động tổng thể của giải pháp đề xuất}
+\label{fig:flowchart}
+\end{figure}
+
+Ở giai đoạn đầu, thuật toán Greedy Insertion xây dựng một lời giải ban đầu bằng cách duyệt qua từng khách hàng theo thứ tự deadline tăng dần. Với mỗi khách, thuật toán sinh ra \textit{tất cả} các move khả thi trên mọi xe tương thích, phân loại chúng thành nhóm không vi phạm time window (\textit{feasibleMoves}) và nhóm vi phạm time window (\textit{penalizedMoves}), sau đó chọn move tốt nhất theo thứ tự ưu tiên. Lời giải này đóng vai trò điểm khởi đầu cho giai đoạn tối ưu hóa tiếp theo, đồng thời cung cấp hằng số chuẩn hóa $H$ cho hàm mục tiêu.
+
+Ở giai đoạn hai, Adaptive Tabu Search liên tục cải thiện lời giải thông qua sáu toán tử lân cận: \textit{Relocate}, \textit{Or-opt(2)}, \textit{Swap}, \textit{2-opt}, \textit{Cross-trip} (khai thác cục bộ) và \textit{Trip-Relocate} (di chuyển cả chuyến). Hàm mục tiêu sử dụng bốn thành phần vi phạm chuẩn hóa với trọng số $\lambda = (\lambda_Q, \lambda_D, \lambda_{TW}, \lambda_W)$ được điều chỉnh tự động bởi Strategic Oscillation. Khi bị kẹt tại cực tiểu địa phương (bộ đếm $h_{\text{div}} \geq H_{\text{div}}$), cơ chế đa dạng hóa Ruin \& Recreate được kích hoạt.
+
+% ============================================================
+\section{Xây dựng lời giải ban đầu bằng Greedy Insertion}
+% ============================================================
+
+\subsection{Ý tưởng chung}
+
+Lời giải ban đầu được xây dựng bằng thuật toán Greedy Insertion (chèn tham lam). Thuật toán duyệt qua từng khách hàng theo thứ tự ưu tiên thời hạn sớm nhất (Earliest Due Date --- EDD). Với mỗi khách, thay vì chỉ thử một vài vị trí cố định, thuật toán \textbf{sinh ra toàn bộ các move có thể} từ mọi xe tương thích và chọn move tốt nhất theo tiêu chí có phân cấp.
+
+\subsection{Sắp xếp khách hàng theo EDD}
+
+Toàn bộ khách hàng được sắp xếp tăng dần theo thời hạn phục vụ $l_i$:
+\[
+C_{\text{sorted}} = \text{sort}\!\left(C,\ \text{key} = l_i \uparrow\right)
+\]
+Việc ưu tiên khách có cửa sổ thời gian hẹp trước giúp giảm nguy cơ vi phạm ràng buộc TW cho các khách khó bố trí nhất.
+
+\subsection{Sinh tất cả moves và phân loại}
+
+Với mỗi khách $c \in C_{\text{sorted}}$, thuật toán sinh ra \textbf{toàn bộ moves} từ mọi xe tương thích:
+
+\begin{itemize}
+    \item \textbf{Xe tương thích}: mọi xe tải (luôn tương thích nếu $q_c \leq M_T$ và $\tau^T(c, 0) \leq L_w$), và drone nếu $c \in C_2$, $q_c \leq M_D$, $\tau^D(0,c)+\tau^D(c,0) \leq L_D$, và $\tau^D(c,0) \leq L_w$.
+    \item \textbf{Loại move 1}: chèn $c$ vào mọi vị trí trong mọi trip hiện có của xe.
+    \item \textbf{Loại move 2}: mở trip mới $[0,c,0]$ tại mọi vị trí trong chuỗi trip của xe (đầu, giữa, hoặc cuối chuỗi). Vì multi-trip là tuần tự, vị trí trong chuỗi trip ảnh hưởng đến \texttt{start\_time} và do đó đến makespan.
+\end{itemize}
+
+Mỗi move được kiểm tra ràng buộc cấu trúc (không trùng khách, C1 chỉ cho xe tải, tương thích tĩnh). Move vi phạm ràng buộc cấu trúc bị loại bỏ ngay. Với mỗi move hợp lệ, tính $\Delta\text{TW}(a)$ --- vi phạm time window của khách vừa chèn trong lời giải sau khi áp move:
+\[
+\Delta\text{TW}(a) = \max\!\left(0,\ a_c - l_c\right)
+\]
+Các move còn lại được chia thành:
+\begin{itemize}
+    \item $\mathcal{F}$ (\textit{feasibleMoves}): $\Delta\text{TW}(a) \leq 0$ (không tăng vi phạm TW).
+    \item $\mathcal{P}$ (\textit{penalizedMoves}): $\Delta\text{TW}(a) > 0$.
+\end{itemize}
+
+\subsection{Chọn move tốt nhất}
+
+\[
+\text{move}^* = \begin{cases}
+\displaystyle\arg\min_{m \in \mathcal{F}} \text{Makespan}(m) & \text{nếu } \mathcal{F} \neq \emptyset \\[6pt]
+\displaystyle\arg\min_{m \in \mathcal{P}} \bigl(\Delta\text{TW}(m),\ \text{Makespan}(m),\ \text{Dist}(m)\bigr)_{\text{lex}} & \text{nếu } \mathcal{F} = \emptyset
+\end{cases}
+\]
+
+Nếu có feasibleMoves, chọn move cho makespan nhỏ nhất. Nếu chỉ có penalizedMoves, chọn theo thứ tự lexicographic: ưu tiên (1) tăng TW ít nhất, (2) makespan nhỏ nhất, (3) tổng quãng đường ngắn nhất.
+
+\subsection{Tính toán thời gian đến (Precompute)}
+
+Sau mỗi lần chèn, chuyến được tính lại. Thời điểm đến tại nút thứ $i$ trong chuỗi là:
+\[
+a_0 = t_{\text{start}}, \qquad
+a_i = \max\!\left(a_{i-1} + \tau(i{-}1,\, i),\; e_i\right) \quad \forall i \geq 1
+\]
+trong đó $e_i$ là thời điểm mở cửa của nút $i$ (ready time), và $\tau(\cdot)$ là thời gian di chuyển tương ứng với loại phương tiện. Với mô hình đa chuyến, chuyến kế tiếp bắt đầu đúng lúc chuyến trước kết thúc: $t^{k+1}_{\text{start}} = r^k$.
+
+Thời gian chờ hàng tại khách $i$ được định nghĩa là thời gian từ khi phương tiện đến phục vụ $i$ đến khi phương tiện trở về depot:
+\[
+w_i = r_{\text{trip}} - a_i
+\]
+trong đó $r_{\text{trip}}$ là thời điểm về depot của chuyến chứa khách $i$. Ràng buộc $w_i \leq L_w = 3600$ giây đảm bảo hàng không bị giữ trên xe quá lâu sau khi lấy.
+
+\subsection{Pseudocode}
+
+\begin{algorithm}[H]
+\caption{Greedy Insertion --- Xây dựng lời giải ban đầu}
+\label{alg:greedy}
+\KwIn{Bộ dữ liệu $\mathcal{I}$ (khách hàng, phương tiện, ràng buộc)}
+\KwOut{Lời giải ban đầu $s_0$, hằng số chuẩn hóa $H$}
+$C \leftarrow \mathrm{sort}(\mathcal{I}.\mathrm{customers},\ \mathrm{key} = l_i \uparrow)$\;
+Khởi tạo mỗi xe với danh sách trip rỗng; $s_0 \leftarrow$ solution rỗng\;
+\ForEach{khách hàng $c \in C$}{
+    $\mathcal{F} \leftarrow \emptyset$;\quad $\mathcal{P} \leftarrow \emptyset$\;
+    \ForEach{xe $v$ tương thích với $c$}{
+        \ForEach{move $a$ \upshape(chèn vào trip có \textbf{hoặc} mở trip mới tại mọi vị trí)}{
+            Thử chèn $c$ bằng move $a$; tính lại chuyến bị ảnh hưởng\;
+            \If{$a$ vi phạm ràng buộc cấu trúc \upshape(trùng khách, C1/drone, tương thích tĩnh)}{
+                Bỏ qua $a$\;
+            }
+            \ElseIf{$\Delta\text{TW}(a) \leq 0$}{
+                $\mathcal{F} \leftarrow \mathcal{F} \cup \{a\}$\;
+            }
+            \Else{
+                $\mathcal{P} \leftarrow \mathcal{P} \cup \{a\}$\;
+            }
+        }
+    }
+    \If{$\mathcal{F} \neq \emptyset$}{
+        $a^* \leftarrow \arg\min_{a \in \mathcal{F}} \mathrm{Makespan}(a)$\;
+    }
+    \Else{
+        $a^* \leftarrow \arg\min_{a \in \mathcal{P}} \bigl(\Delta\text{TW}(a),\ \mathrm{Makespan}(a),\ \mathrm{Dist}(a)\bigr)_{\text{lex}}$\;
+    }
+    Áp dụng $a^*$ vào $s_0$\;
+}
+$H \leftarrow \max\!\left\{1,\; C_{\max}(s_0),\; \max_i l_i\right\}$\;
+\Return $s_0$, $H$\;
+\end{algorithm}
+
+% ============================================================
+\section{Cải thiện lời giải bằng Adaptive Tabu Search}
+% ============================================================
+
+\subsection{Ý tưởng chung}
+
+Adaptive Tabu Search (ATS) là metaheuristic tìm kiếm cục bộ có bộ nhớ ngắn hạn và điều chỉnh trọng số phạt thích nghi. Xuất phát từ lời giải ban đầu $s_0$, thuật toán lặp đi lặp lại việc chuyển sang nghiệm lân cận tốt nhất từ một pool ứng viên. Danh sách Tabu ngăn đảo ngược các move vừa thực hiện.
+
+Thuật toán duy trì hai bộ đếm riêng biệt:
+\begin{itemize}
+    \item $h_{\text{stop}}$: đếm số vòng không cải thiện $s^*_F$ --- dùng để dừng thuật toán.
+    \item $h_{\text{div}}$: đếm số vòng không cải thiện bất kỳ nghiệm tốt nhất nào --- dùng để kích hoạt đa dạng hóa.
+\end{itemize}
+
+Thuật toán được tăng cường bởi:
+\begin{itemize}
+    \item \textit{Hàm mục tiêu chuẩn hóa} với trọng số $\lambda$ điều chỉnh động theo từng ràng buộc.
+    \item \textit{Hai nghiệm tham chiếu}: $s^*_F$ (nghiệm khả thi tốt nhất) và $s^*_I$ (nghiệm không khả thi tốt nhất).
+    \item \textit{Strategic Oscillation} --- điều chỉnh $\lambda$ theo tỉ lệ nghiệm khả thi từng ràng buộc.
+    \item Sáu toán tử lân cận: \textit{Relocate}, \textit{Or-opt(2)}, \textit{Swap}, \textit{2-opt}, \textit{Cross-trip} và \textit{Trip-Relocate}.
+    \item Cơ chế đa dạng hóa \textit{Ruin \& Recreate} khi $h_{\text{div}} \geq H_{\text{div}}$.
+\end{itemize}
+
+\subsection{Hàm mục tiêu}
+
+Hàm mục tiêu kết hợp makespan chuẩn hóa và bốn thành phần vi phạm:
+
+\[
+F_\lambda(s) = \tilde{C}_{\max}(s)
+             + \lambda_Q\, \bar{V}_Q(s)
+             + \lambda_D\, \bar{V}_D(s)
+             + \lambda_{TW}\, \bar{V}_{TW}(s)
+             + \lambda_W\, \bar{V}_W(s)
+             + 1000\cdot \bar{V}_{\text{unassigned}}(s)
+\]
+
+trong đó $\tilde{C}_{\max}(s) = C_{\max}(s)\,/\,H$ là makespan chuẩn hóa, và $H = \max\!\{1, C_{\max}(s_0), \max_i l_i\}$ được tính \textbf{một lần} từ lời giải ban đầu và không thay đổi trong suốt quá trình tìm kiếm.
+
+Các thành phần vi phạm được chuẩn hóa theo số lượng khách $n$:
+
+\begin{align*}
+\bar{V}_Q(s) &= \frac{1}{n}\sum_{\text{trip}}\max\!\!\left(0,\;\frac{\text{load}_{\text{trip}} - M_v}{M_v}\right) \\[4pt]
+\bar{V}_D(s) &= \frac{1}{n}\sum_{\substack{\text{drone}\\\text{trip}}}\max\!\!\left(0,\;\frac{t^{\text{flight}}_{\text{trip}} - L_D}{L_D}\right) \\[4pt]
+\bar{V}_{TW}(s) &= \frac{1}{n}\sum_{i\in\text{khách}}\max\!\!\left(0,\;\frac{a_i - l_i}{H}\right) \\[4pt]
+\bar{V}_W(s) &= \frac{1}{n}\sum_{i\in\text{khách}}\max\!\!\left(0,\;\frac{(r_{\text{trip}_i} - a_i) - L_w}{L_w}\right) \\[4pt]
+\bar{V}_{\text{unassigned}}(s) &= \frac{|\{i : i\text{ chưa được phục vụ}\}|}{n}
+\end{align*}
+
+trong đó $t^{\text{flight}}_{\text{trip}}$ là tổng thời gian bay của chuyến drone, $r_{\text{trip}_i}$ là thời điểm phương tiện về depot của chuyến chứa khách $i$ (thời gian hàng nằm trên xe sau khi được lấy). Khách chưa được phục vụ bị phạt rất nặng ($\times 1000$) để luôn ưu tiên giảm số khách thiếu trước khi tối ưu makespan.
+
+Các trọng số $\lambda_Q = \lambda_D = \lambda_{TW} = \lambda_W = 1{,}0$ ban đầu, được giới hạn trong $[0{,}001;\; 1000]$ và điều chỉnh bởi Strategic Oscillation (Mục~\ref{subsec:so}).
+
+\textbf{Nghiệm khả thi:} $s$ khả thi khi $V_\Sigma(s) = \bar{V}_Q + \bar{V}_D + \bar{V}_{TW} + \bar{V}_W \leq \varepsilon$ và $\bar{V}_{\text{unassigned}} = 0$.
+
+\textbf{Nghiệm tốt nhất $s^*_F$:} chỉ cập nhật khi nghiệm hiện tại khả thi và có $C_{\max}$ nhỏ hơn. Song song, thuật toán duy trì $s^*_I$ --- nghiệm không khả thi tốt nhất theo thứ tự $(V_\Sigma, \tilde{C}_{\max}, d)$ --- dùng khi chưa tìm được nghiệm khả thi nào.
+
+\subsection{Chọn thành phần tìm kiếm}
+\label{subsec:components}
+
+Để giảm thời gian tính, mỗi vòng lặp không xét toàn bộ khách/trip mà chỉ chọn một tập con \textbf{có định hướng}. Hàm \textsc{SelectSearchComponents} trả về danh sách \textit{selectedCustomers} và \textit{selectedTrips}:
+
+\begin{itemize}
+    \item \textbf{Chưa có $s^*_F$:} chọn $\lfloor n/3 \rfloor$ khách có đóng góp vi phạm TW+$W$ cao nhất, cộng các khách từ trip vượt tải/tầm bay, cộng thêm $\lceil 0{,}3n \rceil$ khách ngẫu nhiên.
+    \item \textbf{Đã có $s^*_F$:} chọn toàn bộ khách và trip của \textit{phương tiện critical} (có $C_v = C_{\max}$), cộng thêm một phần ngẫu nhiên.
+\end{itemize}
+
+\subsection{Danh sách Tabu và Aspiration Criterion}
+
+Danh sách Tabu lưu các \textbf{thuộc tính cung} (arc attributes) bị cấm:
+\[
+\mathcal{T}[\text{key}] = \mathit{iter} + \tau, \qquad \tau \sim \mathcal{U}[\tau_0,\; 2\tau_0], \quad \tau_0 = 7
+\]
+Move bị cấm nếu $\mathcal{T}[\text{key}] > \mathit{iter}$. Tenure $\tau$ được lấy ngẫu nhiên đều trong $[\tau_0, 2\tau_0]$ để tránh chu kỳ.
+
+Ba loại thuộc tính được theo dõi:
+
+\begin{table}[H]
+\centering
+\caption{Các loại thuộc tính Tabu}
+\label{tab:tabu_attrs}
+\begin{tabular}{lll}
+\toprule
+\textbf{Loại} & \textbf{Key} & \textbf{Áp dụng} \\
+\midrule
+Cung          & \texttt{ARC|$v$|$u$|$w$} (cung $u\!\to\!w$ trên xe $v$) & Mọi toán tử \\
+Phân công     & \texttt{ASSIGN|$c$|$v$} (khách $c$ từng ở xe $v$)       & Relocate, Or-opt(2), Swap \\
+Thứ tự trip   & \texttt{TRIP\_RETURN|uid|$v$|$\text{pred}$}              & Trip-Relocate \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Cơ chế:} Khi một move được thực hiện, tập \textit{removedAttributes} (các thuộc tính có trong nghiệm \textit{trước} move nhưng không còn \textit{sau} move) được ghi vào $\mathcal{T}$. Candidate bị coi là Tabu nếu bất kỳ thuộc tính nào trong \textit{addedAttributes} (thuộc tính xuất hiện \textit{sau} move) còn trong $\mathcal{T}$.
+
+\textbf{Aspiration Criterion:} Move bị Tabu vẫn được chấp nhận theo hai trường hợp:
+\begin{enumerate}
+    \item \textit{Đã có $s^*_F$}: candidate khả thi và $C_{\max}(s') < C_{\max}(s^*_F)$.
+    \item \textit{Chưa có $s^*_F$}: candidate tốt hơn $s^*_I$ theo $(V_\Sigma, \tilde{C}_{\max}, d)$.
+\end{enumerate}
+
+\subsection{Các toán tử lân cận}
+
+Thuật toán sử dụng sáu toán tử. Ở mỗi vòng lặp, \textbf{tất cả sáu toán tử đều được chạy}, toàn bộ move sinh ra được tổng hợp vào một pool chung, và candidate tốt nhất (theo $F_\lambda$) được chọn thực hiện.
+
+\subsubsection{Toán tử Relocate}
+
+Di chuyển \textbf{1 khách} ra khỏi vị trí hiện tại và chèn vào vị trí tốt nhất trong toàn hệ thống. Thuật toán xét các khách trong \textit{selectedCustomers}. Với mỗi khách $c$: rút $c$ khỏi tuyến hiện tại, sau đó thử tất cả vị trí chèn trên mọi xe tương thích, mọi chuyến (kể cả mở chuyến mới).
+
+\subsubsection{Toán tử Or-opt(2)}
+
+Di chuyển \textbf{2 khách liên tiếp} $[c_1, c_2]$ trong cùng một chuyến sang một vị trí khác, giữ nguyên thứ tự cặp. Phù hợp để cải thiện cấu trúc tuyến khi hai khách liền kề tốt hơn nếu được phục vụ ở chuyến hoặc xe khác.
+
+\subsubsection{Toán tử Swap}
+
+\textbf{Hoán đổi vị trí} của hai khách $c_a$ và $c_b$ bất kỳ trong hệ thống (cùng trip, khác trip hoặc khác xe). Ràng buộc tương thích tĩnh được kiểm tra trước. Thuật toán xét các cặp từ \textit{selectedCustomers}.
+
+\subsubsection{Toán tử 2-opt}
+
+\textbf{Đảo ngược đoạn con} $[\sigma_i, \ldots, \sigma_j]$ bên trong cùng một chuyến:
+\[
+[\ldots, \sigma_{i-1},\ \sigma_i,\ \sigma_{i+1},\ldots, \sigma_j,\ \sigma_{j+1},\ldots]
+\;\longrightarrow\;
+[\ldots, \sigma_{i-1},\ \sigma_j,\ \sigma_{j-1},\ldots, \sigma_i,\ \sigma_{j+1},\ldots]
+\]
+Loại bỏ các giao cắt tuyến đường và cải thiện thứ tự phục vụ trong chuyến.
+
+\subsubsection{Toán tử Cross-trip}
+
+\textbf{Hoán đổi đoạn đuôi} giữa hai chuyến $t_a$ và $t_b$ (của bất kỳ hai xe nào tương thích) tại điểm cắt $(\mathit{cut}_a, \mathit{cut}_b)$:
+\begin{align*}
+t_a &= [\sigma^a_0, \ldots, \sigma^a_{\mathit{cut}_a - 1},\ \underbrace{\sigma^a_{\mathit{cut}_a}, \ldots}_{\text{đuôi A}}\ 0] \\
+t_b &= [\sigma^b_0, \ldots, \sigma^b_{\mathit{cut}_b - 1},\ \underbrace{\sigma^b_{\mathit{cut}_b}, \ldots}_{\text{đuôi B}}\ 0]
+\end{align*}
+sau hoán đổi: đuôi A gắn vào $t_b$ và đuôi B gắn vào $t_a$. Tương thích tĩnh của từng khách với xe đích được kiểm tra trước. Toán tử này tái phân bổ khách giữa các chuyến nhằm cân bằng tải và giảm makespan.
+
+\subsubsection{Toán tử Trip-Relocate}
+
+Di chuyển \textbf{cả một chuyến} (toàn bộ khách trong đó) sang vị trí khác trong chuỗi trip của cùng xe hoặc chuyển sang xe khác:
+\[
+R_v = [\ldots, t_{k-1},\ \underbrace{t_k}_{\text{trip di chuyển}},\ t_{k+1},\ldots]
+\;\longrightarrow\;
+R_{v'} = [\ldots,\ t_k,\ldots]\ \text{(chèn vào vị trí mới)}
+\]
+Toán tử kiểm tra tương thích tĩnh của mọi khách trong chuyến với xe đích. Hữu ích để tái cấu trúc lịch trình khi một chuyến nguyên vẹn phù hợp hơn ở vị trí/xe khác.
+
+\begin{table}[H]
+\centering
+\caption{Tổng hợp các toán tử lân cận}
+\label{tab:operators}
+\begin{tabular}{llll}
+\toprule
+\textbf{Toán tử} & \textbf{Move} & \textbf{Phạm vi} & \textbf{Vai trò} \\
+\midrule
+Relocate         & 1 khách             & Toàn hệ thống        & Khai thác \\
+Or-opt(2)        & 2 khách liên tiếp   & Toàn hệ thống        & Khai thác \\
+Swap             & Hoán đổi 2 khách    & Toàn hệ thống        & Khai thác \\
+2-opt            & Đảo đoạn $[i..j]$   & Trong 1 chuyến       & Khai thác \\
+Cross-trip       & Hoán đổi đuôi       & Bất kỳ 2 chuyến      & Khai thác \\
+Trip-Relocate    & Di chuyển 1 chuyến  & Toàn hệ thống        & Khai thác \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Strategic Oscillation --- Phạt Động}
+\label{subsec:so}
+
+Strategic Oscillation điều chỉnh động từng trọng số $\lambda_x \in \{\lambda_Q, \lambda_D, \lambda_{TW}, \lambda_W\}$ dựa trên tỉ lệ nghiệm khả thi của ràng buộc đó trong mỗi đoạn $L_\lambda = 20$ vòng lặp. Với mỗi ràng buộc $x$, đếm $\text{count}_x$ = số vòng trong đoạn mà ràng buộc $x$ không bị vi phạm. Sau mỗi đoạn:
+
+\[
+\rho_x = \frac{\text{count}_x}{L_\lambda}
+\]
+
+\[
+\lambda_x \leftarrow \begin{cases}
+\min\!\left(\lambda_{\max},\ \gamma_+\cdot\lambda_x\right) & \text{nếu } \rho_x < \rho_{\min} \quad\text{(vi phạm nhiều, tăng phạt)} \\
+\max\!\left(\lambda_{\min},\ \gamma_-\cdot\lambda_x\right) & \text{nếu } \rho_x > \rho_{\max} \quad\text{(luôn khả thi, giảm phạt)} \\
+\lambda_x & \text{ngược lại}
+\end{cases}
+\]
+
+với $\rho_{\min} = 0{,}20$, $\rho_{\max} = 0{,}80$, $\gamma_+ = 1{,}50$, $\gamma_- = 0{,}85$ và $[\lambda_{\min}, \lambda_{\max}] = [0{,}001;\; 1000]$. Bộ đếm $\text{count}_x$ được đặt lại về 0 sau mỗi lần cập nhật. Cơ chế này tự động tăng phạt khi một ràng buộc bị vi phạm thường xuyên, và giảm phạt khi ràng buộc đó liên tục được thỏa mãn, giúp duy trì cân bằng giữa khai thác và thám hiểm.
+
+\subsection{Cơ chế đa dạng hóa (Ruin \& Recreate)}
+
+Khi $h_{\text{div}} \geq H_{\text{div}}$, thuật toán thực hiện Ruin \& Recreate để thoát khỏi vùng cực tiểu địa phương sâu, sau đó xóa danh sách Tabu và đặt lại $h_{\text{div}} = 0$.
+
+\paragraph{Giai đoạn Ruin.} Loại bỏ $q = \max\!\{1, \lfloor\rho\cdot n\rfloor\}$ khách (ban đầu $\rho = 0{,}15$) theo ba nhóm:
+\begin{enumerate}
+    \item $\approx q/3$ khách có đóng góp vi phạm TW+$W$ cao nhất.
+    \item $\approx q/3$ khách từ \textit{phương tiện critical} (xe có $C_v = C_{\max}$); nếu nghiệm hiện tại khả thi, nhóm này lấy $\approx q/2$.
+    \item Phần còn lại chọn ngẫu nhiên.
+\end{enumerate}
+Nếu lần thử thất bại, giảm tỉ lệ $\rho \leftarrow \max(0{,}05,\; 0{,}8\cdot\rho)$ và thử lại tối đa 5 lần.
+
+\paragraph{Giai đoạn Recreate.} Chèn lại từng khách bị xóa theo thứ tự $l_i$ tăng dần (xáo nhẹ với xác suất 10\% cho mỗi cặp liền kề để tạo đa dạng). Mỗi khách được chèn theo best-insertion trên toàn hệ thống, ưu tiên tránh xe tải đầu tiên (trucks[0]) nếu còn phương tiện khác khả dụng.
+
+\subsection{Điều kiện dừng}
+
+Thuật toán dừng khi thỏa một trong ba điều kiện:
+\begin{enumerate}
+    \item Đã thực hiện $N_{\max} = 2000$ vòng lặp.
+    \item Không cải thiện $s^*_F$ sau $H_{\text{stop}} = 500$ vòng liên tiếp.
+    \item Thời gian chạy vượt $T_{\text{lim}} = 20$ giây.
+\end{enumerate}
+
+Riêng $h_{\text{div}}$ (bộ đếm đa dạng hóa) được đặt lại về 0 mỗi khi có cải thiện; khi $h_{\text{div}} \geq H_{\text{div}} = 360$ thì kích hoạt Ruin \& Recreate mà không dừng thuật toán.
+
+\subsection{Pseudocode}
+
+\begin{algorithm}[H]
+\caption{Adaptive Tabu Search với Strategic Oscillation}
+\label{alg:ts}
+\KwIn{Lời giải ban đầu $s_0$, hằng số $H$, tham số $(N_{\max}, H_{\text{stop}}, H_{\text{div}}, \tau_0, L_\lambda, T_{\text{lim}})$}
+\KwOut{Lời giải tốt nhất $s^*$}
+$s \leftarrow s_0$;\quad $\lambda \leftarrow (1,1,1,1)$;\quad Tính $F_\lambda(s_0)$\;
+\eIf{$s_0$ khả thi}{$s^*_F \leftarrow s_0$;\quad $s^*_I \leftarrow \emptyset$\;}{$s^*_F \leftarrow \emptyset$;\quad $s^*_I \leftarrow s_0$\;}
+Khởi tạo danh sách Tabu $\mathcal{T} \leftarrow \emptyset$;\quad $h_{\text{div}} \leftarrow 0$;\quad $h_{\text{stop}} \leftarrow 0$;\quad $\text{counts} \leftarrow \mathbf{0}$\;
+\For{$\mathit{iter} = 1$ \KwTo $N_{\max}$}{
+    \If{$h_{\text{stop}} \geq H_{\text{stop}}$ \upshape\textbf{hoặc} thời gian $> T_{\text{lim}}$}{\textbf{break}\;}
+    \tcp{Đa dạng hóa khi bị kẹt}
+    \If{$h_{\text{div}} \geq H_{\text{div}}$}{
+        $\mathit{rr} \leftarrow \textsc{RuinRecreate}(s, \lambda, s^*_F, H)$\;
+        \If{$\mathit{rr}.\mathit{success}$}{$s \leftarrow \mathit{rr}.\mathit{solution}$;\quad $\mathcal{T} \leftarrow \emptyset$;\quad $h_{\text{div}} \leftarrow 0$\;}
+        Cập nhật $s^*_F$, $s^*_I$ từ $s$;\quad cập nhật $h_{\text{stop}}$\;
+        \textbf{continue}\;
+    }
+    \tcp{Sinh và lọc pool ứng viên}
+    $\mathit{pool} \leftarrow \textsc{BuildCandidatePool}(s, s^*_F, \lambda, H)$\;
+    $\mathit{admissible} \leftarrow \{c \in \mathit{pool} \mid \neg\textsc{IsTabu}(c, \mathcal{T}, \mathit{iter})\ \mathbf{or}\ \textsc{Aspiration}(c, s^*_F, s^*_I)\}$\;
+    \If{$\mathit{admissible} = \emptyset$}{
+        Giải phóng sớm khóa tabu hết hạn sớm nhất; $\mathit{admissible} \leftarrow \mathit{pool}$\;
+        \If{$\mathit{admissible} = \emptyset$}{$h_{\text{div}} \leftarrow H_{\text{div}}$;\quad \textbf{continue}\;}
+    }
+    $c^* \leftarrow \textsc{SelectBestCandidate}(\mathit{admissible}, s^*_F)$\;
+    $s \leftarrow c^*.\mathit{solution}$;\quad $\textsc{RegisterTabu}(c^*, \mathcal{T}, \mathit{iter}, \tau_0)$\;
+    \tcp{Cập nhật nghiệm tốt nhất}
+    \eIf{\upshape cập nhật $s^*_F$ hoặc $s^*_I$ thành công}{$h_{\text{div}} \leftarrow 0$;\quad $h_{\text{stop}} \leftarrow 0$\;}{$h_{\text{div}} \mathrel{+}= 1$;\quad $h_{\text{stop}} \mathrel{+}= 1$\;}
+    \tcp{Thống kê khả thi cho Strategic Oscillation}
+    Cập nhật $\text{counts}$ từ $s$\;
+    \If{$\mathit{iter} \bmod L_\lambda = 0$}{$\textsc{UpdatePenalties}(\lambda, \text{counts})$;\quad $\text{counts} \leftarrow \mathbf{0}$\;}
+}
+\Return $s^*_F \neq \emptyset$ ? $s^*_F$ : $s^*_I$\;
+\end{algorithm}
+
+\end{document}
