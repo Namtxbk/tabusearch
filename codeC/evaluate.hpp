@@ -20,59 +20,30 @@ inline double computeH(const Instance& inst, double initialMakespan) {
     return H;
 }
 
-// Đo các đại lượng vi phạm dựa trên lịch trình HIỆN CÓ của các vehicle (không recompute).
-// Dùng khi caller đã tự recompute đúng những vehicle bị move/insertion tác động — tránh
-// recompute lại toàn bộ solution (lãng phí O(n) mỗi candidate khi chỉ 1-2 vehicle thay đổi).
+// Tổng hợp các đại lượng vi phạm từ số liệu đã cache trong từng Vehicle (do recomputeVehicle cập nhật).
+// O(số vehicle) — KHÔNG duyệt khách/trip. Caller phải đảm bảo mọi vehicle bị thay đổi đã được
+// recompute (evaluate_move.hpp / construction.hpp làm đúng việc đó cho các vehicle bị move chạm vào).
 inline void aggregateSolutionMetrics(const Instance& inst, Solution& s, const PenaltyWeights& lambda, double H) {
     double maxCompletion = 0.0;
+    double VQ = 0.0, VD = 0.0, VTW = 0.0, VW = 0.0;
+    double totalDistance = 0.0;
+    int served = 0;
     for (const auto& vp : s.vehicles) {
-        maxCompletion = std::max(maxCompletion, vp->completionTime);
+        const Vehicle& v = *vp;
+        maxCompletion = std::max(maxCompletion, v.completionTime);
+        VQ += v.rawVQ;
+        VD += v.rawVD;
+        VTW += v.rawVTW;
+        VW += v.rawVW;
+        totalDistance += v.distance;
+        served += v.numCustomers;
     }
     s.makespan = maxCompletion;
     s.normalizedMakespan = (H > 0.0) ? (s.makespan / H) : s.makespan;
 
     int n = inst.numCustomers();
     if (n <= 0) n = 1; // tránh chia 0
-
-    double VQ = 0.0, VD = 0.0, VTW = 0.0, VW = 0.0;
-    double totalDistance = 0.0;
-    std::vector<bool> served(inst.numCustomers() + 1, false); // index theo id 1-based (0 depot không dùng)
-
-    for (const auto& vp : s.vehicles) {
-        const Vehicle& v = *vp;
-        double capacity = v.capacity(inst);
-        bool isDrone = (v.type == VehicleType::DRONE);
-
-        for (const auto& trip : v.trips) {
-            // Vi phạm tải trọng
-            if (capacity > 0.0) {
-                VQ += posPart(trip.load - capacity) / capacity;
-            }
-
-            // Vi phạm tầm bay drone: L_D là giới hạn THỜI GIAN BAY (giây) — energy model "endurance",
-            // xác nhận từ dữ liệu benchmark thực tế. Không so sánh bằng quãng đường.
-            if (isDrone && inst.drone_range > 0.0) {
-                VD += posPart(trip.flightTime - inst.drone_range) / inst.drone_range;
-            }
-
-            totalDistance += trip.travelDistance;
-
-            // Vi phạm time window + vi phạm thời gian chờ hàng
-            for (std::size_t pos = 0; pos < trip.customers.size(); ++pos) {
-                int custId = trip.customers[pos];
-                if (custId >= 1 && custId <= inst.numCustomers()) served[custId] = true;
-                const Customer& cust = inst.node(custId);
-                double arrival = trip.arrivalTime[pos];
-                if (H > 0.0) {
-                    VTW += posPart(arrival - cust.due) / H;
-                }
-                double wait = trip.returnTime - arrival; // r_sigma(i) - a_i
-                if (inst.max_wait > 0.0) {
-                    VW += posPart(wait - inst.max_wait) / inst.max_wait;
-                }
-            }
-        }
-    }
+    if (H > 0.0) VTW /= H;
 
     s.violationCapacity = VQ / n;
     s.violationRange = VD / n;
@@ -81,10 +52,8 @@ inline void aggregateSolutionMetrics(const Instance& inst, Solution& s, const Pe
     s.totalViolation = s.violationCapacity + s.violationRange + s.violationTimeWindow + s.violationWaiting;
     s.totalDistance = totalDistance;
 
-    int unassigned = 0;
-    for (int cid = 1; cid <= inst.numCustomers(); ++cid) {
-        if (!served[cid]) ++unassigned;
-    }
+    // Không có khách trùng (đã được loại bởi kiểm tra cấu trúc) nên số khách chưa phục vụ = n - tổng đã phục vụ.
+    int unassigned = std::max(0, inst.numCustomers() - served);
     s.unassignedCount = unassigned;
     // Mỗi khách chưa được phục vụ cũng được cộng vào tổng vi phạm (nhân hệ số lớn để luôn ưu tiên
     // giảm số khách thiếu trước khi tối ưu makespan/other violations) — quy đổi theo cùng thang đo

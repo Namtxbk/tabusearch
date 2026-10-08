@@ -111,7 +111,7 @@ inline InsertionCandidate evaluateInsertion(const Instance& inst, const Solution
     if (vi < 0) { result.valid = false; return result; }
     recomputeVehicle(inst, sPrime.detachVehicle(vi), 0);
 
-    if (violatesStructuralConstraint(inst, sPrime, /*forceAllCustomersPresent=*/false)) {
+    if (violatesStructuralConstraintTouched(inst, sPrime, {vi})) { // chỉ vehicle đích thay đổi
         result.valid = false;
         return result;
     }

@@ -49,6 +49,16 @@ struct Vehicle {
     std::vector<Trip> trips;        // R_v = (sigma_v1, ..., sigma_vm) — thứ tự có ý nghĩa
     double completionTime = 0.0;    // C_v(s)
 
+    // Số liệu vi phạm/quãng đường của riêng vehicle này, được recomputeVehicle cập nhật cùng lịch trình.
+    // Lưu dạng THÔ (chưa chia n, chưa chia H) để aggregateSolutionMetrics chỉ cần cộng O(số vehicle)
+    // thay vì duyệt lại mọi khách của solution cho từng candidate (delta evaluation).
+    double rawVQ = 0.0;             // sum posPart(load - cap) / cap
+    double rawVD = 0.0;             // sum posPart(flightTime - L_D) / L_D (chỉ drone)
+    double rawVTW = 0.0;            // sum posPart(arrival - due)       (chia H khi tổng hợp)
+    double rawVW = 0.0;             // sum posPart(wait - L_w) / L_w
+    double distance = 0.0;          // sum travelDistance
+    int numCustomers = 0;           // số khách đang được phục vụ bởi vehicle
+
     double capacity(const Instance& inst) const {
         return (type == VehicleType::TRUCK) ? inst.truck_capacity : inst.drone_capacity;
     }

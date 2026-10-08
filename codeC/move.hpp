@@ -118,6 +118,8 @@ public:
     void insert(const TabuAttribute& a) {
         if (!contains(a)) items_.push_back(a);
     }
+    // Chèn KHÔNG kiểm tra trùng — chỉ dùng khi caller đảm bảo phần tử là duy nhất (vd. các cung của 1 solution).
+    void insertUnique(const TabuAttribute& a) { items_.push_back(a); }
     bool contains(const TabuAttribute& a) const {
         for (const auto& x : items_) {
             if (x == a) return true;

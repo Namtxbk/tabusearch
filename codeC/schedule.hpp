@@ -97,6 +97,26 @@ inline void recomputeVehicle(const Instance& inst, Vehicle& v, int firstAffected
     } else {
         v.completionTime = v.trips.back().returnTime;
     }
+
+    // Cập nhật số liệu thô của vehicle (xem Vehicle::rawVQ...) — O(độ dài vehicle), chỉ chạy cho
+    // vehicle vừa bị recompute nên các vehicle không đổi giữ nguyên số liệu cũ.
+    double capacity = v.capacity(inst);
+    v.rawVQ = v.rawVD = v.rawVTW = v.rawVW = v.distance = 0.0;
+    v.numCustomers = 0;
+    for (const auto& trip : v.trips) {
+        if (capacity > 0.0) v.rawVQ += std::max(0.0, trip.load - capacity) / capacity;
+        if (isDrone && inst.drone_range > 0.0) {
+            v.rawVD += std::max(0.0, trip.flightTime - inst.drone_range) / inst.drone_range;
+        }
+        v.distance += trip.travelDistance;
+        for (std::size_t pos = 0; pos < trip.customers.size(); ++pos) {
+            v.rawVTW += std::max(0.0, trip.arrivalTime[pos] - inst.node(trip.customers[pos]).due);
+            if (inst.max_wait > 0.0) {
+                v.rawVW += std::max(0.0, trip.returnTime - trip.arrivalTime[pos] - inst.max_wait) / inst.max_wait;
+            }
+        }
+        v.numCustomers += static_cast<int>(trip.customers.size());
+    }
 }
 
 // Tính lại toàn bộ các trip của 1 vehicle từ đầu (tiện dùng ở init / evaluate toàn cục).
