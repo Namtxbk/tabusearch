@@ -1,0 +1,413 @@
+GIẢI THÍCH CODE ADAPTIVE TABU SEARCH (MVRPD-TW)
+================================================
+
+Nội dung gồm 3 phần:
+  PHẦN 1. Cơ chế cấm (tabu) với các tuyến đường đi
+  PHẦN 2. Luồng chạy tổng thể của chương trình
+  PHẦN 3. Chi tiết vòng lặp chọn move
+
+
+################################################################################
+PHẦN 1. CƠ CHẾ CẤM (TABU) VỚI CÁC TUYẾN ĐƯỜNG ĐI
+################################################################################
+
+Code dùng tabu theo thuộc tính (attribute-based): thay vì cấm cả một nghiệm hay
+một move, nó cấm các CUNG (cạnh) cụ thể trên tuyến của từng xe.
+
+1. Thuộc tính tabu của tuyến là cung (xe, từ, đến)
+--------------------------------------------------
+Ở move.hpp:70-101, mỗi cung trên tuyến được biểu diễn bằng bộ 3 số:
+
+    arcAttribute(vehicleId, fromNode, toNode)   // depot = 0
+
+Một trip của xe 2 là depot -> 5 -> 3 -> depot sinh ra 3 thuộc tính:
+(2,0,5), (2,5,3), (2,3,0). Hàm collectArcsOfTrip (operators.hpp:94) làm việc
+này. Hàm extractTabuAttributesForVehicles (operators.hpp:108) gom tất cả cung
+của mọi trip thuộc các xe mà move tác động tới.
+
+Ngoài cung còn 2 loại thuộc tính phụ:
+  - ASSIGN(khách, xe cũ): dùng khi khách bị chuyển sang xe khác.
+  - TRIP_RETURN(tripUid, xe nguồn, trip đứng trước): dùng cho TripRelocate.
+
+2. Tính cung bị xóa và cung được thêm (evaluate_move.hpp:113-166)
+-----------------------------------------------------------------
+Với mỗi move ứng viên, code làm 3 việc:
+  1. oldAttributes = các cung của những xe bị ảnh hưởng TRƯỚC khi áp move.
+  2. Áp move trên bản sao sPrime.
+  3. newAttributes = các cung của những xe đó SAU khi áp move.
+
+Sau đó lấy hiệu tập hợp:
+    removedAttributes = old \ new   // cung bị phá đi
+    addedAttributes   = new \ old   // cung mới tạo ra
+
+Ví dụ: Relocate khách 3 từ xe 2 sang xe 1.
+  - Xe 2 trước: 0->5->3->0. Sau: 0->5->0.
+  - Bị xóa: (2,5,3) và (2,3,0). Được thêm: (2,5,0) cùng các cung mới trên xe 1.
+
+3. Ghi tabu bằng cung bị xóa (tabu.hpp:47)
+------------------------------------------
+Khi move được chọn và thực hiện:
+    tenure = random trong [tau0, 2*tau0]      // tau0 = baseTabuTenure = 7
+    với mỗi a thuộc removedAttributes:  tabuUntil[a] = iteration + tenure
+
+Danh sách tabu là một unordered_map<thuộc tính, vòng lặp hết hạn>. Ý nghĩa là:
+các cung vừa bị phá thì không được tạo lại trong tenure vòng tới. Nhờ vậy thuật
+toán không quay ngay về tuyến cũ. Tenure được lấy ngẫu nhiên để tránh lặp theo
+chu kỳ.
+
+4. Kiểm tra tabu bằng cung được thêm (tabu.hpp:38)
+--------------------------------------------------
+    isTabu(c) = tồn tại a thuộc c.addedAttributes sao cho tabuUntil[a] > iteration
+
+Nếu move ứng viên tạo lại bất kỳ cung nào đang bị cấm thì nó là move tabu. Trong
+ví dụ trên, ở các vòng sau, mọi move đưa khách 3 trở lại sau khách 5 trên xe 2
+(tạo lại cung (2,5,3)) đều bị cấm.
+
+5. Ngoại lệ và nới lỏng (tabu_search.hpp:114-143)
+-------------------------------------------------
+  - Aspiration (tabu.hpp:60): move tabu vẫn được chấp nhận nếu:
+      + đã có nghiệm khả thi, và nghiệm mới khả thi với makespan tốt hơn
+        nghiệm tốt nhất; hoặc
+      + chưa có nghiệm khả thi nào, và nghiệm mới tốt hơn nghiệm không khả thi
+        tốt nhất.
+  - Khi mọi ứng viên đều bị tabu: các thuộc tính sắp hết hạn sớm nhất được giải
+    phóng ngay, rồi toàn bộ candidate pool được cho phép.
+  - Khi chạy Ruin & Recreate (đa dạng hóa): cả danh sách tabu bị xóa sạch bằng
+    tabuList.clear().
+
+Lưu ý: có thể có lỗi với ASSIGN và TRIP_RETURN
+----------------------------------------------
+(Suy ra khi đọc code, chưa chạy thử.) Hàm extractTabuAttributes chèn
+ASSIGN(customerId, sourceVehicleId) dựa trên move m, không dựa trên nghiệm. Vì
+vậy với Relocate và OrOpt2, thuộc tính này xuất hiện giống hệt ở cả old lẫn new.
+Khi lấy old \ new nó bị triệt tiêu, nên không bao giờ được ghi vào danh sách
+tabu. TRIP_RETURN của TripRelocate cũng bị triệt tiêu theo cách tương tự.
+
+Hệ quả là với các move này, thuật toán chỉ cấm theo cung, còn thuộc tính phân
+công xe thực tế không có tác dụng. Riêng Swap vẫn chạy đúng, vì nó xác định xe
+bằng cách tra vị trí thật của khách trong nghiệm.
+
+Hướng sửa đề xuất: chỉ thêm ASSIGN và TRIP_RETURN thẳng vào removedAttributes
+sau bước lấy hiệu tập hợp. Cách sửa cho ASSIGN chỉ đúng khi thêm cả bước kiểm
+tra tương ứng: khi đánh giá ứng viên, phải đưa ASSIGN(khách, xe đích) vào
+addedAttributes thì isTabu mới bắt được lúc khách quay lại xe cũ. TRIP_RETURN
+cần một bước kiểm tra tương tự.
+
+
+################################################################################
+PHẦN 2. LUỒNG CHẠY TỔNG THỂ CỦA CHƯƠNG TRÌNH
+################################################################################
+
+Toàn bộ chương trình đi từ main.cpp vào hàm adaptiveTabuSearch
+(tabu_search.hpp:41). Luồng chia làm 3 giai đoạn:
+khởi tạo -> vòng lặp Tabu -> trả kết quả.
+
+main.cpp
+ |- readJsonInstance()            đọc dữ liệu bài toán
+ |- adaptiveTabuSearch()          <- thuật toán chính
+ |   |- [A] Khởi tạo
+ |   |- [B] Vòng lặp chính (lặp đến khi dừng)
+ |   `- [C] Trả nghiệm tốt nhất
+ |- printSolution()               in tuyến đường từng xe
+ `- validateSolution()            kiểm tra lại nghiệm độc lập
+
+Bước 0: main.cpp
+----------------
+1. Đọc file JSON (mặc định 6_5_1.json, hoặc lấy từ tham số dòng lệnh) bằng
+   readJsonInstance (instance.hpp). Kết quả gồm danh sách khách, số truck,
+   số drone, time window, tải trọng...
+2. Nếu có tham số thứ 2 thì ghi đè max_wait.
+3. Đặt tham số chạy (main.cpp:57-64):
+
+   Tham số                     Giá trị        Ý nghĩa
+   maxIterations               2000           số vòng lặp tối đa
+   timeLimitSeconds            200000         thực tế là không giới hạn thời gian
+   stoppingStagnation          500            dừng khi 500 vòng liền không cải thiện
+   diversificationStagnation   30             30 vòng không cải thiện thì gọi Ruin & Recreate
+   baseTabuTenure              7 (mặc định)   tau0
+   penaltySegmentLength        20 (mặc định)  cứ 20 vòng chỉnh hệ số phạt một lần
+
+   (CODE_SUMMARY.md vẫn ghi 20s và H_div = 360, đây là giá trị cũ. Code hiện
+   tại dùng 200000s và 30.)
+
+Giai đoạn A: Khởi tạo (tabu_search.hpp:41-83)
+---------------------------------------------
+A1. Dựng nghiệm ban đầu bằng buildInitialSolution (construction.hpp), theo kiểu
+    Greedy Insertion:
+    - Ban đầu mọi xe đều rỗng (không có trip nào).
+    - Sắp khách theo hạn chót l_i tăng dần (EDD).
+    - Với từng khách, thử mọi vị trí chèn trên mọi xe. Trong các vị trí không
+      làm khách trễ, chọn vị trí cho makespan nhỏ nhất. Nếu vị trí nào cũng trễ
+      thì chọn theo thứ tự (độ trễ, makespan, quãng đường).
+    - Tính hằng số chuẩn hóa H = max{1, C_max(s0), max l_i}, dùng cố định suốt
+      quá trình.
+
+A2. Đánh giá nghiệm bằng evaluateSolution (evaluate.hpp):
+    F(s) = C_max/H + lQ*V_Q + lD*V_D + lTW*V_TW + lW*V_W + 1000*V_unassigned
+    Các hệ số lambda ban đầu đều bằng 1.
+
+A3. Lưu nghiệm tốt nhất. Có 2 biến riêng:
+    - bestFeasible (s*_F): nghiệm khả thi tốt nhất.
+    - bestInfeasible (s*_I): nghiệm không khả thi tốt nhất, dùng khi chưa tìm
+      được nghiệm khả thi.
+
+A4. Khởi tạo các biến còn lại: tabuList rỗng, feasibleCounts = 0,
+    iteration = hDiv = hStop = 0.
+
+Giai đoạn B: Vòng lặp chính (tabu_search.hpp:85-170)
+----------------------------------------------------
+Vòng lặp chạy khi CẢ BA điều kiện còn đúng: iteration < 2000, chưa hết giờ,
+và hStop < 500. Mỗi vòng đi qua các bước sau.
+
+B1. Đa dạng hóa nếu bị kẹt (ruin_recreate.hpp)
+    Nếu hDiv >= 30, tức đã 30 vòng không cải thiện:
+    - Ruin: gỡ khoảng 15% số khách khỏi nghiệm. Ưu tiên khách vi phạm time
+      window hoặc thời gian chờ, khách trên xe "critical" (xe có thời gian hoàn
+      thành bằng makespan), phần còn lại chọn ngẫu nhiên.
+    - Recreate: chèn lại các khách đó theo best-insertion. Nếu thất bại thì giảm
+      tỉ lệ ruin (rho <- 0.8*rho) và thử lại, tối đa 5 lần.
+    - Nếu thành công: current = nghiệm mới và xóa sạch tabu list.
+    - Đặt hDiv = 0, cập nhật nghiệm tốt nhất, rồi continue sang vòng sau mà
+      không chạy các bước B2-B7.
+
+B2. Sinh tập ứng viên (candidate_pool.hpp)
+    1. Chọn vùng tìm kiếm bằng selectSearchComponents (select_components.hpp)
+       để không phải thử toàn bộ nghiệm:
+       - Khi chưa có nghiệm khả thi: chọn khoảng n/3 khách vi phạm TW/W nặng
+         nhất, khách trên trip quá tải hoặc drone bay quá tầm, cộng thêm 30%
+         khách ngẫu nhiên.
+       - Khi đã có nghiệm khả thi: chọn toàn bộ khách và trip của xe critical,
+         cộng thêm 30% khách và 30% trip ngẫu nhiên.
+    2. Sinh move từ 6 toán tử (operators.hpp): Relocate, Or-opt(2), Swap,
+       2-opt, Cross-trip, Trip-Relocate.
+    3. Đánh giá từng move bằng evaluateMove (evaluate_move.hpp):
+       - Copy nghiệm, áp move, xóa trip rỗng.
+       - Loại move nếu vi phạm ràng buộc cấu trúc.
+       - Tính lại lịch trình của các xe bị ảnh hưởng (recomputeVehicle,
+         schedule.hpp), rồi tổng hợp makespan và các vi phạm.
+       - Loại move nếu tổng vi phạm > 5.0.
+       - Tính removedAttributes và addedAttributes (xem Phần 1).
+
+B3. Lọc theo tabu (tabu.hpp)
+    Một ứng viên được giữ lại nếu không tabu hoặc thỏa aspiration. Nếu tất cả
+    đều bị cấm: giải phóng các thuộc tính sắp hết hạn sớm nhất, rồi cho phép
+    mọi ứng viên. Nếu thậm chí không có ứng viên nào: đặt hDiv = 30 để vòng sau
+    chạy Ruin & Recreate.
+
+B4. Chọn move tốt nhất (select_move.hpp)
+    - Khi chưa có nghiệm khả thi: so sánh theo thứ tự (tổng vi phạm, makespan
+      chuẩn hóa, quãng đường).
+    - Khi đã có nghiệm khả thi: so sánh theo thứ tự (F_lambda, tổng vi phạm,
+      makespan, quãng đường).
+    Move tốt nhất luôn được thực hiện, kể cả khi nó làm nghiệm xấu đi. Đây chính
+    là điểm giúp Tabu Search thoát khỏi cực trị địa phương.
+
+B5. Ghi tabu
+    registerTabu đánh dấu các cung vừa bị phá là tabu trong tau vòng, với tau
+    ngẫu nhiên trong [7, 14].
+
+B6. Cập nhật nghiệm tốt nhất (best_solutions.hpp)
+    - Nếu current khả thi và có makespan nhỏ hơn s*_F thì cập nhật s*_F, tính
+      là cải thiện.
+    - Nếu current không khả thi mà tốt hơn s*_I thì cập nhật s*_I. Việc này chỉ
+      tính là cải thiện khi CHƯA CÓ nghiệm khả thi.
+    - Có cải thiện: hDiv = hStop = 0. Không cải thiện: tăng cả hai lên 1.
+    (hDiv và hStop dùng cùng một tín hiệu cải thiện, chỉ khác ngưỡng (30 và
+    500). Ngoài ra hStop bị reset sau mỗi lần Ruin & Recreate nếu nghiệm mới
+    tốt hơn.)
+
+B7. Strategic Oscillation (strategic_oscillation.hpp)
+    - Mỗi vòng, collectFeasibilityStats đếm xem current có thỏa TỪNG ràng buộc
+      Q, D, TW, W hay không.
+    - Cứ 20 vòng, updatePenalties chỉnh hệ số phạt cho từng ràng buộc:
+      + Nếu ràng buộc được thỏa < 20% số vòng: lambda x 1.5 (phạt nặng hơn để
+        kéo về vùng khả thi).
+      + Nếu được thỏa > 80% số vòng: lambda x 0.85 (nới phạt để khám phá vùng
+        không khả thi).
+      + lambda luôn nằm trong [0.001, 1000]. Bộ đếm reset sau mỗi lần chỉnh.
+
+Giai đoạn C: Kết thúc (tabu_search.hpp:172-195)
+-----------------------------------------------
+- Nếu đã có s*_F thì trả về nghiệm đó và in "Feasible found: YES".
+- Nếu không thì trả về s*_I (hoặc current) và in cảnh báo
+  "No feasible solution found".
+- Quay lại main: in makespan, quãng đường, các vi phạm, tuyến từng xe
+  (0 -> 5 -> 3 -> 0). Cuối cùng chạy validateSolution (validator.hpp) để kiểm
+  tra lại nghiệm một cách độc lập.
+
+Tóm tắt một vòng lặp
+--------------------
+  hDiv >= 30? --yes--> Ruin & Recreate -> xóa tabu -> continue
+      | no
+      v
+  Chọn vùng (khách / trip) -> 6 toán tử sinh move -> evaluateMove từng move
+      v
+  Lọc: không tabu HOẶC aspiration
+      v
+  Chọn ứng viên tốt nhất -> current = ứng viên đó
+      v
+  Ghi tabu các cung bị phá (tau thuộc [7,14])
+      v
+  Cập nhật s*_F / s*_I -> hDiv, hStop
+      v
+  Đếm khả thi -> cứ 20 vòng chỉnh lambda
+
+
+################################################################################
+PHẦN 3. CHI TIẾT VÒNG LẶP CHỌN MOVE
+################################################################################
+
+Phần chọn move của mỗi vòng lặp đi qua 5 bước:
+chọn vùng -> sinh move -> đánh giá move -> lọc tabu -> chọn move tốt nhất.
+
+  current
+    |
+    v  (1) selectSearchComponents     chọn tập khách K và tập trip T cần xét
+    v  (2) 6 hàm generate*            sinh danh sách Move (chỉ là "mô tả", chưa sửa nghiệm)
+    v  (3) evaluateMove (mỗi move)    copy nghiệm -> áp move -> tính lịch -> Candidate
+    v  (4) lọc tabu / aspiration      admissiblePool
+    v  (5) selectBestCandidate        chọn 1 -> current = candidate.solution
+
+(1) Chọn vùng tìm kiếm (select_components.hpp:65)
+-------------------------------------------------
+Hàm này không xét toàn bộ nghiệm. Nó chỉ chọn một tập khách (selectedCustomers)
+và một tập trip (selectedTrips, mỗi phần tử là cặp (vehicleIdx, tripIdx)). Cách
+chọn phụ thuộc vào việc đã có nghiệm khả thi hay chưa.
+
+Khi chưa có nghiệm khả thi (dòng 69-103): tập trung sửa vi phạm
+  1. Tính mức vi phạm của từng khách bằng customerTWContribution:
+     max(0, đến - l_i) + max(0, (về depot - đến) - L_w),
+     tức độ trễ cộng với phần chờ vượt mức.
+  2. Sắp giảm dần và lấy n/3 khách vi phạm nặng nhất.
+  3. Thêm toàn bộ khách trên các trip quá tải hoặc trip drone bay quá tầm.
+  4. Thêm max(3, 30%*n) khách ngẫu nhiên để tìm kiếm không bị dồn vào một chỗ.
+  5. selectedTrips = các trip đang chứa những khách vừa chọn.
+
+Khi đã có nghiệm khả thi (dòng 104-138): tập trung giảm makespan
+  1. Tìm các xe critical, tức xe có completionTime == makespan. Đây là xe quyết
+     định makespan.
+  2. Lấy toàn bộ khách và toàn bộ trip của các xe critical.
+  3. Thêm max(3, 30%*n) khách ngẫu nhiên và max(2, 30%*số trip) trip ngẫu nhiên.
+  Mục đích: makespan chỉ giảm được khi xe critical về sớm hơn, nên tìm kiếm tập
+  trung vào xe đó.
+
+(2) Sinh move bằng 6 toán tử (operators.hpp)
+--------------------------------------------
+Mỗi move chỉ là một struct Move mô tả việc cần làm, chưa sửa nghiệm. Mỗi toán tử
+lấy đầu vào từ một nguồn khác nhau:
+
+  - Relocate (:139) — nguồn: khách
+      Gỡ 1 khách, chèn vào mọi vị trí của mọi trip trên xe tương thích, hoặc tạo
+      trip mới ở mọi vị trí trong chuỗi trip.
+      Giới hạn: <= 80 vị trí/khách, vượt thì lấy mẫu ngẫu nhiên.
+  - Or-opt(2) (:255) — nguồn: trip
+      Lấy 2 khách liền nhau (p, p+1) trong trip và chèn cả cụm như Relocate.
+      Giới hạn: <= 80 vị trí/cụm.
+  - Swap (:410) — nguồn: khách
+      Hoán đổi vị trí của 2 khách i và j (cùng trip hoặc khác xe).
+      Giới hạn: <= 600 cặp.
+  - 2-opt (:452) — nguồn: trip
+      Đảo ngược đoạn [p..q] trong 1 trip.
+      Không giới hạn, O(m^2) mỗi trip.
+  - Cross-trip (:494) — nguồn: cặp trip
+      Cắt 2 trip A, B tại cutA, cutB rồi tráo phần đuôi cho nhau.
+      Giới hạn: <= 40 tổ hợp/cặp, tổng <= 800.
+  - Trip-Relocate (:592) — nguồn: trip
+      Chuyển nguyên 1 trip sang vị trí khác trong chuỗi trip của xe này hoặc xe
+      khác. Không giới hạn.
+
+Ví dụ với xe 1 có trip 0->2->5->7->0 và xe 2 có trip 0->3->4->0:
+  - Relocate khách 5 sang xe 2, vị trí 1: xe 1 thành 0->2->7->0,
+    xe 2 thành 0->3->5->4->0.
+  - 2-opt trên trip của xe 1 với p=0, q=2: 0->7->5->2->0.
+  - Cross-trip với cutA=1, cutB=1: xe 1 thành 0->2->4->0, xe 2 thành 0->3->5->7->0.
+  - Trip-Relocate: chuyển trip [3,4] sang xe 1, đặt sau trip hiện có, nên xe 1
+    chạy 2 chuyến.
+
+Lọc sớm bằng staticCompatible (schedule.hpp:18): mọi toán tử đổi xe của khách
+đều kiểm tra trước, loại move đặt khách vào xe không phục vụ được:
+  - Drone không chở khách C1, không chở hàng vượt M_D, và chuyến bay khứ hồi
+    depot<->khách phải <= tầm bay.
+  - Thời gian từ khách về depot phải <= L_w. Nếu không, hàng chắc chắn chờ quá lâu.
+
+Cơ chế giới hạn: nếu tổng số vị trí khả dĩ vượt ngưỡng (80, 600 hoặc 40) thì code
+lấy mẫu ngẫu nhiên thay vì duyệt hết. Với instance nhỏ, mọi vị trí vẫn được duyệt
+đầy đủ.
+
+(3) Đánh giá từng move (evaluate_move.hpp:114)
+----------------------------------------------
+buildCandidatePool gọi evaluateMove cho từng move. Mỗi lần gọi làm các bước sau:
+
+  1. sPrime = copy(current)                      deep copy nghiệm
+  2. oldAttrs = cung của các xe bị ảnh hưởng      (cho tabu)
+  3. applyMove(sPrime, m)                         sửa danh sách khách trong trip
+  4. removeEmptyTrips(sPrime)                     trip rỗng thì xóa
+  5. violatesStructuralConstraint? -> loại        khách trùng/thiếu, khách sai loại xe
+  6. recomputeVehicle(xe bị ảnh hưởng)            tính lại lịch trình
+  7. aggregateSolutionMetrics                     makespan, vi phạm, F_lambda
+  8. totalViolation > 5.0? -> loại                nghiệm quá tệ
+  9. newAttrs -> removed = old\new, added = new\old
+
+Bước 6, recomputeVehicle (schedule.hpp:43), chạy lần lượt từng trip của xe:
+  - Trip k bắt đầu khi trip k-1 về depot (startTime = returnTime của trip trước).
+  - Với mỗi khách: đến = max(e_i, lúc rời điểm trước + thời gian đi), nên xe đến
+    sớm phải chờ mở cửa.
+  - Cộng dồn load (tải) và travelDistance. Với drone còn cộng thêm flightTime.
+  - waitingTime[i] = returnTime - arrivalTime[i]: thời gian hàng của khách i nằm
+    trên xe đến lúc xe về depot.
+
+Chỉ các xe bị move tác động mới được tính lại. Các xe khác giữ nguyên số liệu cũ,
+rồi aggregateSolutionMetrics tổng hợp lại C_max, V_Q, V_D, V_TW, V_W và F_lambda.
+
+Kết quả của mỗi move là một Candidate gồm
+{solution, move, removedAttributes, addedAttributes}. Các candidate hợp lệ được
+đưa vào candidatePool.
+
+(4) Lọc tabu (tabu_search.hpp:114-143)
+--------------------------------------
+Với mỗi candidate c:
+  tabu       = có cung nào trong c.addedAttributes vẫn đang bị cấm
+  aspiration = (a) c khả thi và makespan < makespan của s*_F,
+               hoặc (b) chưa có s*_F và c tốt hơn s*_I theo thứ tự
+               (V_Sigma, C_max, Distance)
+  giữ lại nếu  !tabu || aspiration
+
+Nếu admissiblePool rỗng (mọi candidate đều tabu):
+  - Tìm mốc hết hạn sớm nhất trong tabu list và cho các thuộc tính đó hết hạn ngay.
+  - Đưa toàn bộ candidatePool vào admissiblePool.
+  - Nếu ngay cả candidatePool cũng rỗng: đặt hDiv = H_div để vòng sau chạy
+    Ruin & Recreate.
+
+(5) Chọn move tốt nhất (select_move.hpp:12)
+-------------------------------------------
+Hàm so sánh theo thứ tự từ điển (lexicographic): chỉ khi tiêu chí trước bằng nhau
+(sai lệch <= 1e-9) mới xét tiêu chí sau.
+
+  Chưa có s*_F : (1) totalViolation -> (2) C_max/H -> (3) quãng đường
+  Đã có s*_F   : (1) F_lambda (penalizedObjective) -> (2) totalViolation
+                 -> (3) C_max/H -> (4) quãng đường
+
+Sau đó:
+  current = selected->solution;     // chấp nhận move kể cả khi nghiệm xấu đi
+  registerTabu(*selected, ...);     // cấm các cung vừa bị phá
+
+Điểm quan trọng: khi CHƯA CÓ nghiệm khả thi, tiêu chí chọn KHÔNG dùng lambda. Nó
+chỉ cực tiểu hóa tổng vi phạm thô. Vì vậy Strategic Oscillation (chỉnh lambda)
+chỉ ảnh hưởng đến việc chọn move sau khi đã tìm được nghiệm khả thi đầu tiên.
+Trước thời điểm đó lambda vẫn được cập nhật nhưng không có tác dụng.
+
+Một số điểm để ý khi đọc code
+-----------------------------
+1. Trip-Relocate có move không thay đổi gì (operators.hpp:607-609). Biến
+   isOriginalPos đã tính trường hợp destPos == srcTi + 1 trên cùng xe, nhưng
+   không được dùng ((void)isOriginalPos). Trường hợp này vẫn sinh move: rút trip
+   ra rồi chèn lại đúng chỗ cũ, nghiệm không đổi. Move này tốn một lần
+   evaluateMove, và có thể được chọn khi các move khác đều làm nghiệm xấu đi.
+   Khi đó thuật toán đứng yên một vòng.
+2. Chi phí lớn nhất nằm ở bước (3). Mỗi move đều deep copy toàn bộ Solution.
+   Ngoài ra ở tabu_search.hpp:148-150, mọi candidate admissible lại bị copy thêm
+   một lần (admissibleCopies) chỉ để truyền vào selectBestCandidate. Có thể
+   truyền thẳng vector con trỏ để bỏ lần copy này.
+3. Ngưỡng maxAllowedInfeasibility = 5.0 so với totalViolation thô, chưa nhân
+   lambda. Ở giai đoạn đầu, khi nghiệm còn nhiều vi phạm, ngưỡng này có thể loại
+   phần lớn candidate.
