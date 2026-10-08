@@ -5,6 +5,7 @@
 #include <string>
 #include "instance.hpp"
 #include "tabu_search.hpp"
+#include "validator.hpp"
 
 static const char* vehicleTypeName(VehicleType t) {
     return (t == VehicleType::TRUCK) ? "TRUCK" : "DRONE";
@@ -55,7 +56,7 @@ int main(int argc, char** argv) {
 
         TabuSearchParams params;
         params.maxIterations = 2000;
-        params.timeLimitSeconds = 20.0;
+        params.timeLimitSeconds = 200000.0;
         params.stoppingStagnation = 500;
         // 360 quá cao so với tổng số iteration khả dụng trong ngân sách thời gian (n lớn chỉ chạy
         // được ~100-400 iteration/20s) -> ruin-recreate gần như không bao giờ được kích hoạt.
@@ -69,6 +70,10 @@ int main(int argc, char** argv) {
                   << " | Feasible found: " << (result.foundFeasible ? "YES" : "NO") << "\n\n";
 
         printSolution(inst, result.best);
+
+        std::cout << "\n";
+        ValidationReport report = validateSolution(inst, result.best);
+        printValidationReport(report);
     } catch (const std::exception& ex) {
         std::cerr << "Error: " << ex.what() << std::endl;
         return 1;
