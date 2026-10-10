@@ -18,6 +18,25 @@
 #include "ruin_recreate.hpp"
 #include "construction.hpp"
 
+// ====================== [DEBUG LOG - có thể xoá cả khối này] ======================
+// Log giá trị nghiệm hiện tại (current) ở mỗi vòng lặp + kiểm tra có khả thi không.
+// Không ảnh hưởng thuật toán, chỉ in ra std::cout. Muốn tắt: xoá lời gọi logIterationDebug(...)
+// ở trong vòng lặp bên dưới, hoặc xoá luôn hàm này.
+inline void logIterationDebug(long long iteration, const Solution& current) {
+    std::cout << "[debug][iter " << iteration << "] "
+              << "penalizedObjective=" << current.penalizedObjective
+              << " makespan=" << current.makespan
+              << " totalViolation=" << current.totalViolation
+              << " (Q=" << current.violationCapacity
+              << ", D=" << current.violationRange
+              << ", TW=" << current.violationTimeWindow
+              << ", W=" << current.violationWaiting << ")"
+              << " unassigned=" << current.unassignedCount
+              << " feasible=" << (isFeasible(current) ? "YES" : "NO")
+              << "\n";
+}
+// ====================== [/DEBUG LOG] ======================
+
 struct TabuSearchParams {
     long long maxIterations = 20000;      // N_max
     double timeLimitSeconds = 60.0;       // T_lim
@@ -104,6 +123,8 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
             bool improved = updateBestSolutions(current, bestFeasible, bestInfeasible);
             if (improved) hStop = 0; else hStop += 1;
 
+            logIterationDebug(iteration, current); // [DEBUG LOG - có thể xoá]
+
             continue; // 17
         }
 
@@ -138,6 +159,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
             if (admissiblePool.empty()) {
                 // Không có move hợp lệ nào (candidatePool rỗng) -> ép diversification ở vòng sau
                 hDiv = params.diversificationStagnation;
+                logIterationDebug(iteration, current); // [DEBUG LOG - có thể xoá]
                 continue;
             }
         }
@@ -150,6 +172,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
         const Candidate* selected = selectBestCandidate(admissibleCopies, bestFeasible.get());
         if (selected == nullptr) {
             hDiv = params.diversificationStagnation;
+            logIterationDebug(iteration, current); // [DEBUG LOG - có thể xoá]
             continue;
         }
 
@@ -168,6 +191,8 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
         if (iteration % oscParams.segmentLength == 0) {
             updatePenalties(lambda, feasibleCounts, oscParams);
         }
+
+        logIterationDebug(iteration, current); // [DEBUG LOG - có thể xoá]
     }
 
     // 39-40. Kết quả
