@@ -1,0 +1,650 @@
+\documentclass[aspectratio=169]{beamer}
+
+% ---------- Font & ngôn ngữ (XeLaTeX, hỗ trợ tiếng Việt) ----------
+\usepackage{fontspec}
+\setmainfont{DejaVu Sans}
+\usepackage{polyglossia}
+\setdefaultlanguage{vietnamese}
+
+\usepackage{amsmath,amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,backgrounds}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+
+% ---------- Theme ----------
+\usetheme{Madrid}
+\usecolortheme{whale}
+\setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}[frame number]
+\setbeamertemplate{caption}[numbered]
+
+\title[Truck--Drone VRPTW]{Hệ thống lấy hàng truck và drone hoạt động song song, có ràng buộc time window}
+\subtitle{Mô hình bài toán và giải thuật Tabu Search thích nghi}
+\author{Học viên: Trần Xuân Nam -- 20251177M\\[1mm]
+\small Giảng viên hướng dẫn: TS. Nguyễn Khánh Phương}
+\date{}
+
+% ---------- Tiện ích ----------
+\newcommand{\hl}[1]{\textcolor{blue!60!black}{\textbf{#1}}}
+
+\begin{document}
+
+% ===================================================================
+\begin{frame}
+  \titlepage
+\end{frame}
+
+\begin{frame}{Nội dung}
+  \tableofcontents
+\end{frame}
+
+% ===================================================================
+\section{Giới thiệu bài toán}
+
+\begin{frame}{Bối cảnh}
+  \begin{columns}[T]
+    \begin{column}{0.55\textwidth}
+      \begin{itemize}
+        \item Một \hl{Depot} xuất phát $K$ truck và $D$ drone giống nhau.
+        \item Tập khách hàng $C$ cần được \hl{lấy hàng} (pickup), chia làm 2 loại:
+        \begin{itemize}
+          \item $C_1$: bắt buộc phục vụ bằng \textbf{truck}
+          \item $C_2$: phục vụ được bằng \textbf{truck hoặc drone}
+        \end{itemize}
+        \item Mỗi xe được phép thực hiện \hl{nhiều chuyến (trip)} nối tiếp: xuất phát rỗng từ depot $\to$ lấy hàng $\to$ quay về depot.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.45\textwidth}
+      \begin{tikzpicture}[scale=0.9, every node/.style={font=\small}]
+        \node[circle,draw,fill=orange!30,minimum size=8mm] (D) at (0,0) {Depot};
+        \node[draw,fill=blue!20,rounded corners] (T) at (-2,-1.8) {Truck};
+        \node[draw,fill=green!20,rounded corners] (Dr) at (2,-1.8) {Drone};
+        \node[circle,draw,minimum size=6mm] (c1) at (-3.2,-3.2) {$i_1{\in}C_1$};
+        \node[circle,draw,minimum size=6mm] (c2) at (-1.2,-3.2) {$i_2{\in}C_2$};
+        \node[circle,draw,minimum size=6mm] (c3) at (1.2,-3.2) {$i_3{\in}C_2$};
+        \node[circle,draw,minimum size=6mm] (c4) at (3.2,-3.2) {$i_4{\in}C_2$};
+        \draw[-{Latex}] (D) -- (T);
+        \draw[-{Latex}] (D) -- (Dr);
+        \draw[-{Latex}] (T) -- (c1);
+        \draw[-{Latex}] (T) -- (c2);
+        \draw[-{Latex}] (Dr) -- (c3);
+        \draw[-{Latex}] (Dr) -- (c4);
+      \end{tikzpicture}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Ràng buộc chính}
+  \begin{itemize}
+    \item \hl{Tải trọng}: truck $\le M_T$, drone $\le M_D$
+    \item \hl{Tầm bay drone (Endurance)} $L_D$: tổng \emph{thời gian bay} đi + về trong \emph{một chuyến} drone $\le L_D$
+    \item \hl{Time window} khách $i$: $[e_i, l_i]$ — đến sớm phải chờ, đến sau $l_i$ là vi phạm
+    \item \hl{Thời gian chờ hàng tối đa} $L_w$: thời điểm hàng về depot $-$ thời điểm lấy hàng $\le L_w$
+    \item Thời gian sạc/thay pin drone và phục vụ khách $= 0$; drone luôn xuất phát với pin đầy
+  \end{itemize}
+  \vspace{2mm}
+  \begin{block}{Mục tiêu}
+    Xây dựng hành trình cho tất cả truck/drone sao cho \hl{tối thiểu hoá makespan} — thời điểm toàn bộ hàng hoá đã được đưa về depot.
+  \end{block}
+\end{frame}
+
+% ===================================================================
+\section{Biểu diễn nghiệm}
+
+\begin{frame}{Cấu trúc dữ liệu nghiệm}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Một chuyến (trip):}
+      $$\sigma_{vk} = [0, i_1, i_2, \ldots, i_m, 0]$$
+      \textbf{Chuỗi chuyến của xe $v$:}
+      $$R_v = (\sigma_{v1}, \sigma_{v2}, \ldots, \sigma_{vm_v})$$
+      \begin{alertblock}{Lưu ý}
+        Thứ tự chuyến là một phần của nghiệm — đổi thứ tự làm thay đổi thời gian bắt đầu/kết thúc của \emph{mọi} chuyến phía sau.
+      \end{alertblock}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \small
+      \textbf{Customer}: id, demand, $[e_i,l_i]$, droneEligible
+
+      \textbf{Trip}: uid, vehicleId, customers[], startTime, returnTime, load, travelDistance, arrivalTime[], waitingTime[]
+
+      \textbf{Vehicle}: id, type (TRUCK/DRONE), trips[], completionTime
+
+      \textbf{Solution}: vehicles[], makespan, các $V_Q,V_D,V_{TW},V_W$, penalizedObjective, totalDistance
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{Tính lịch cho một chuyến}
+  Với $\sigma = [0, i_1, \ldots, i_m, 0]$, thời gian lấy hàng:
+  $$a_{i_1} = \max\{e_{i_1},\, t^{\text{start}}_\sigma + \tau^v_{0 i_1}\}, \qquad
+    a_{i_h} = \max\{e_{i_h},\, a_{i_{h-1}} + \tau^v_{i_{h-1} i_h}\}$$
+  Nếu $a_i > l_i$: vẫn lấy hàng tại $a_i$, nhưng phát sinh vi phạm $a_i - l_i$.
+
+  Thời gian trở về depot và thời gian chờ hàng:
+  $$r_\sigma = a_{i_m} + \tau^v_{i_m 0}, \qquad w_i = r_\sigma - a_i$$
+
+  \begin{center}
+  \begin{tikzpicture}[node distance=6mm, every node/.style={font=\footnotesize}]
+    \node[draw,rounded corners,fill=orange!20] (d0) {Depot};
+    \node[draw,rounded corners,fill=blue!15,right=of d0] (i1) {$i_1$: $a_{i_1}$};
+    \node[draw,rounded corners,fill=blue!15,right=of i1] (i2) {$i_2$: $a_{i_2}$};
+    \node[draw,rounded corners,fill=blue!15,right=of i2] (i3) {$\cdots$};
+    \node[draw,rounded corners,fill=orange!20,right=of i3] (d1) {Depot: $r_\sigma$};
+    \draw[-{Latex}] (d0)--(i1); \draw[-{Latex}] (i1)--(i2);
+    \draw[-{Latex}] (i2)--(i3); \draw[-{Latex}] (i3)--(d1);
+  \end{tikzpicture}
+  \end{center}
+\end{frame}
+
+% ===================================================================
+\section{Tương thích tĩnh}
+
+\begin{frame}{Kiểm tra tương thích tĩnh }
+  \small Trước khi sinh bất kỳ move nào, mỗi cặp (khách $i$, xe $v$) được lọc bởi một điều kiện \hl{tĩnh}, không phụ thuộc nghiệm hiện tại — dùng ở mọi nơi sinh move và trong Ruin \& Recreate.
+
+  \vspace{2mm}
+  \textbf{Với xe DRONE:}
+  \begin{itemize}
+    \item \small $i \in C_2$ (không phục vụ được khách thuộc $C_1$)
+    \item \small $q_i \le M_D$ (tải trọng)
+    \item \small $\tau^{D}_{0i} + \tau^{D}_{i0} \le L_D$ — tổng \hl{thời gian bay} khứ hồi đơn $[0,i,0] \le$ tầm bay (Endurance)
+    \item \small $\tau^{D}_{i0} \le L_w$ (không vượt thời gian chờ hàng tối đa nếu về ngay)
+  \end{itemize}
+
+  \vspace{2mm}
+  \textbf{Với xe TRUCK:}
+  \begin{itemize}
+    \item \small $q_i \le M_T$ (tải trọng)
+    \item \small $\tau^{T}_{i0} \le L_w$
+  \end{itemize}
+
+  \vspace{2mm}
+  \begin{alertblock}{Ý nghĩa}
+    \small Đây là điều kiện \hl{cần} (necessary) để khách $i$ có khả năng được phục vụ khả thi ít nhất trong chuyến đơn $[0,i,0]$ — không đảm bảo khả thi khi ghép chung với khách khác trong cùng trip.
+  \end{alertblock}
+\end{frame}
+
+% ===================================================================
+\section{Hàm đánh giá vi phạm}
+
+\begin{frame}{Bốn loại vi phạm chuẩn hoá}
+  Ký hiệu $[x]^+ = \max\{0,x\}$ và hằng số thời gian $H = \max\{1, C_{\max}(s_0), \max_i l_i\}$.
+
+  \begin{align*}
+    V_Q(s)  &= \frac{1}{n}\sum_{\sigma} \frac{[Q(\sigma) - M_{v(\sigma)}]^+}{M_{v(\sigma)}}
+      & \text{\small vượt \hl{tải trọng}}\\[2mm]
+    V_D(s)  &= \frac{1}{n}\sum_{\sigma \in \mathcal{R}_D(s)} \frac{[L(\sigma) - L_D]^+}{L_D}
+      & \text{\small vượt \hl{thời gian bay drone}}\\[2mm]
+    V_{TW}(s) &= \frac{1}{n}\sum_{i \in C} \frac{[a_i - l_i]^+}{H}
+      & \text{\small trễ \hl{time window}}\\[2mm]
+    V_W(s)  &= \frac{1}{n}\sum_{i \in C} \frac{[r_{\sigma(i)} - a_i - L_w]^+}{L_w}
+      & \text{\small vượt \hl{thời gian chờ hàng}}
+  \end{align*}
+
+  \vspace{-1mm}
+  \small $T(\sigma) = \sum_{\text{leg} \in \sigma} \tau^{\text{drone}}_{\text{leg}}$: tổng \emph{thời gian bay} của chuyến $\sigma$ (không tính thời gian chờ tại điểm dừng).
+\end{frame}
+
+\begin{frame}{Tổng vi phạm và điều kiện khả thi}
+  $$V_\Sigma(s) = V_Q(s) + V_D(s) + V_{TW}(s) + V_W(s)$$
+
+  \begin{block}{Nghiệm khả thi}
+    $$V_\Sigma(s) \le \varepsilon \quad \text{\textbf{và}} \quad \text{unassigned}(s) = 0, \qquad \varepsilon = 10^{-9}$$
+  \end{block}
+
+  \begin{alertblock}{Nguyên tắc cốt lõi của thuật toán}
+    Trong quá trình tìm kiếm, nghiệm được phép \hl{tạm thời vi phạm} cả 4 loại ràng buộc trên. \\
+    Nghiệm \textbf{đầu ra} bắt buộc thoả tất cả ràng buộc.
+  \end{alertblock}
+
+  \small Ràng buộc \emph{cấu trúc} không bao giờ được vi phạm: khách không trùng/thiếu, $C_1$ không nằm trên drone, trip phải bắt đầu/kết thúc ở depot, khách phải tương thích tĩnh với phương tiện.
+
+  \vspace{1mm}
+  \small \textbf{Lưu ý triển khai:} $V_\Sigma(s)=0$ \emph{không} tự động đảm bảo mọi khách đã được phục vụ — cần đếm riêng số khách chưa gán (\texttt{unassignedCount}) và bắt buộc bằng 0.
+\end{frame}
+
+% ===================================================================
+\section{Hàm đánh giá nghiệm}
+
+\begin{frame}{Makespan chuẩn hoá và hàm mục tiêu có phạt}
+  \textbf{Makespan:}
+  $$C_{\max}(s) = \max_v C_v(s), \qquad \bar{C}_{\max}(s) = \frac{C_{\max}(s)}{H}$$
+
+  \textbf{Hàm đánh giá có phạt} (chỉ dùng để \emph{dẫn dắt} tìm kiếm):
+  $$F_\lambda(s) = \bar{C}_{\max}(s) + \lambda_Q V_Q(s) + \lambda_D V_D(s) + \lambda_{TW} V_{TW}(s) + \lambda_W V_W(s)$$
+
+  \begin{alertblock}{Giá trị mục tiêu thật sự}
+    Mục tiêu cuối cùng luôn là \hl{makespan thực tế $C_{\max}$} — $F_\lambda$ chỉ hỗ trợ định hướng vì $\lambda$ thay đổi liên tục trong quá trình tìm kiếm (Strategic Oscillation).
+  \end{alertblock}
+
+  \textbf{Ba loại nghiệm cần lưu:} nghiệm hiện tại $s$, nghiệm khả thi tốt nhất $s^*$, nghiệm không khả thi tốt nhất $s^I$ (so sánh theo $(V_\Sigma, \bar{C}_{\max}, \text{Distance})$).
+\end{frame}
+
+% ===================================================================
+\section{Khởi tạo nghiệm}
+
+\begin{frame}{Xây dựng nghiệm khởi tạo}
+  \textbf{Ý tưởng:} chèn tuần tự khách theo deadline tăng dần (kiểu Solomon I1).
+
+  \begin{enumerate}
+    \item Sắp khách hàng theo $l_i$ tăng dần
+    \item Với mỗi khách $i$: sinh mọi vị trí chèn khả dĩ trong mọi trip/xe tương thích (kể cả tạo trip mới)
+    \item Tạm chèn, tính lại lịch, phân loại move:
+    \begin{itemize}
+      \item \textbf{Khả thi} (không tăng vi phạm ) $\to$ chọn makespan nhỏ nhất
+      \item \textbf{Bị phạt} (ưu tiên làm tăng phạt nhỏ nhất) $\to$ chọn theo thứ tự từ điển: \\
+        (1) tăng $\Delta TW$ ít nhất, (2) makespan nhỏ nhất, (3) quãng đường tăng ít nhất
+    \end{itemize}
+    \item Chèn vĩnh viễn move được chọn
+  \end{enumerate}
+
+  \vspace{2mm}
+\end{frame}
+
+% ===================================================================
+\section{Tabu Search tổng quan}
+
+\begin{frame}{Sơ đồ tổng quát}
+  \begin{center}
+  \resizebox{\linewidth}{!}{%
+  \begin{tikzpicture}[
+      node distance=4mm and 6mm,
+      box/.style={
+        draw,
+        rounded corners,
+        fill=blue!12,
+        align=center,
+        font=\scriptsize,
+        minimum height=9mm,
+        text width=2.1cm
+      },
+      dbox/.style={
+        draw,
+        rounded corners,
+        dashed,
+        fill=orange!12,
+        align=center,
+        font=\scriptsize,
+        minimum height=9mm,
+        text width=2.1cm
+      },
+      dia/.style={
+        draw,
+        diamond,
+        fill=green!12,
+        align=center,
+        font=\scriptsize,
+        inner sep=1pt,
+        text width=1.7cm
+      },
+      term/.style={
+        draw,
+        rounded corners,
+        fill=gray!15,
+        align=center,
+        font=\scriptsize,
+        minimum height=9mm,
+        text width=2.1cm
+      }
+    ]
+
+    % =========================
+    % Các node chính
+    % =========================
+    \node[box] (init)
+      {Nghiệm khởi tạo \& TS init};
+
+    \node[box,right=of init] (gen)
+      {Sinh \& đánh giá neighborhood moves};
+
+    \node[box,right=of gen] (sel)
+      {Chọn move tốt nhất chấp nhận được};
+
+    \node[box,right=of sel] (upd)
+      {Cập nhật nghiệm, tabu, penalty, incumbent};
+
+    \node[dia,right=of upd] (stop)
+      {Dừng?};
+
+    \node[term,right=of stop] (ret)
+      {Trả về $s^*$};
+
+    % =========================
+    % Nhánh kiểm tra trì trệ
+    % =========================
+    \node[dia,below=of upd] (stag)
+      {Trì trệ?\\$h_{Div}{\ge}H_{Div}$};
+
+    \node[dbox,below=of sel] (rr)
+      {Diversification\\Ruin-\&-Recreate};
+
+    % =========================
+    % Luồng chính
+    % =========================
+    \draw[-{Latex}] (init) -- (gen);
+    \draw[-{Latex}] (gen) -- (sel);
+    \draw[-{Latex}] (sel) -- (upd);
+    \draw[-{Latex}] (upd) -- (stop);
+
+    % Dừng -> trả về nghiệm tốt nhất
+    \draw[-{Latex}]
+      (stop)
+      -- node[above,font=\scriptsize]{Yes}
+      (ret);
+
+    % Chưa dừng -> kiểm tra trì trệ
+    \draw[-{Latex}]
+      (stop)
+      -- node[right,font=\scriptsize]{No}
+      (stag);
+
+    % Trì trệ -> Diversification
+    \draw[-{Latex}]
+      (stag)
+      -- node[above,font=\scriptsize]{Yes}
+      (rr);
+
+    % Diversification -> Sinh neighborhood
+    \draw[-{Latex}]
+      (rr)
+      -- (gen);
+
+    % Không trì trệ -> quay lại Sinh neighborhood
+    \draw[-{Latex}]
+      (stag.west)
+      to[out=180,in=-90]
+      node[pos=0.35,left,font=\scriptsize]{No}
+      (gen.south);
+
+  \end{tikzpicture}%
+  }
+  \end{center}
+
+  \small
+  \hl{Vòng lặp chính}:
+  sinh candidate pool
+  $\to$ lọc theo tabu/aspiration
+  $\to$ chọn move tốt nhất
+  (có thể xấu hơn hiện tại!)
+  $\to$ cập nhật.
+\end{frame}
+
+\begin{frame}{Strategic Oscillation \& Ruin-and-Recreate}
+  \textbf{Strategic Oscillation} — mỗi $L_\lambda = 20$ vòng lặp, đo tỉ lệ nghiệm thoả từng ràng buộc $\rho_g$:
+  $$
+  \lambda_g \leftarrow
+  \begin{cases}
+    \min\{\lambda_g^{\max}, \gamma_\uparrow \lambda_g\} & \rho_g < \rho_{\min}=0.20 \\
+    \max\{\lambda_g^{\min}, \gamma_\downarrow \lambda_g\} & \rho_g > \rho_{\max}=0.80 \\
+    \lambda_g & \text{ngược lại}
+  \end{cases}
+  $$
+  ($\gamma_\uparrow = 1.5$, $\gamma_\downarrow = 0.85$) — tự động cân bằng giữa ép khả thi và đa dạng hoá.
+
+  \vspace{3mm}
+  \textbf{Ruin \& Recreate} — kích hoạt khi $h_{Div} \ge H_{Div}$:
+  \begin{itemize}
+    \item \textbf{Ruin}: loại $q_{ruin} = \max\{1, \lfloor \rho_{ruin} n \rfloor\}$ khách — ưu tiên vi phạm lớn + trên xe critical + ngẫu nhiên
+    \item \textbf{Recreate}: chèn lại theo $l_i$ tăng dần bằng best-insertion toàn hệ thống
+  \end{itemize}
+\end{frame}
+
+% ===================================================================
+\section{Các nghiệm cần lưu \& Đánh giá move}
+
+\begin{frame}{ Các nghiệm cần lưu}
+  \small Thuật toán duy trì đồng thời \hl{ba loại nghiệm}.
+
+  \vspace{2mm}
+  \textbf{ Nghiệm hiện tại $s$}\\
+  \small Nghiệm mà Tabu Search đang đứng tại đó. $s$ có thể khả thi hoặc không khả thi.
+
+  \vspace{2mm}
+  \textbf{ Nghiệm khả thi tốt nhất $s^*$}\\
+  \small Chỉ cập nhật khi $V_\Sigma(s) = 0$, \texttt{unassigned}$(s)=0$ \emph{và} $C_{\max}(s) < C_{\max}(s^*)$. Nếu chưa tìm được nghiệm khả thi nào thì \texttt{bestFeasible ← null}.
+
+  \vspace{2mm}
+  \textbf{ Nghiệm không khả thi tốt nhất $s^I$}\\
+  \small Hai nghiệm không khả thi được so sánh theo thứ tự từ điển:
+  $$\big(V_\Sigma(s), \bar{C}_{\max}(s), \text{Distance}(s)\big)$$
+  \small Ưu tiên: (1) tổng vi phạm nhỏ hơn, (2) nếu bằng nhau thì makespan nhỏ hơn, (3) nếu vẫn bằng nhau thì tổng quãng đường nhỏ hơn.
+\end{frame}
+
+\begin{frame}{Cách sử dụng ba loại nghiệm}
+  \begin{itemize}
+    \item $s$ là điểm xuất phát để \hl{sinh candidate pool} ở mỗi vòng lặp (BUILD\_CANDIDATE\_POOL) — luôn di chuyển, kể cả khi move được chọn xấu hơn $s$ hiện tại (đặc trưng của Tabu Search).
+    \item $s^*$ là \hl{tiêu chuẩn dừng} và \hl{tiêu chuẩn aspiration} khi đã có nghiệm khả thi: chỉ chấp nhận move tabu nếu candidate khả thi và cải thiện $C_{\max}(s^*)$.
+    \item $s^I$ đóng vai trò định hướng khi \hl{chưa có nghiệm khả thi nào} — giúp thuật toán biết đang tiến gần vùng khả thi hay không, và là chuẩn so sánh cho aspiration ở giai đoạn này.
+    \item Sau mỗi vòng lặp, \texttt{UPDATE\_BEST\_SOLUTIONS} cập nhật cả $s^*$ và $s^I$ dựa trên $s$ hiện tại, đồng thời cập nhật bộ đếm $h_{Div}$, $h_{Stop}$ (reset về 0 nếu cải thiện record).
+    \item Nếu thuật toán dừng mà $s^* \ne$ null $\to$ trả về $s^*$; ngược lại báo "No feasible solution found" và trả $s^I$ chỉ mang tính chẩn đoán.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{8. Đánh giá một move}
+  \small Một move phải được áp dụng \hl{tạm thời} (trên bản sao), sau đó tính lại lịch của các phương tiện bị ảnh hưởng.
+
+  \vspace{2mm}
+  \textbf{Quy trình EVALUATE\_MOVE:}
+  \begin{enumerate}
+    \item \small $s' \leftarrow$ deep copy of $s$; trích thuộc tính tabu cũ \texttt{oldAttributes}
+    \item \small Áp dụng move lên $s'$; xoá mọi trip rỗng
+    \item \small Nếu $s'$ vi phạm ràng buộc cấu trúc $\to$ \texttt{INVALID}
+    \item \small \texttt{RECOMPUTE\_VEHICLE} cho các xe bị ảnh hưởng, bắt đầu từ trip sớm nhất bị thay đổi
+    \item \small \texttt{EVALUATE\_SOLUTION}$(s', \lambda)$; nếu vượt ngưỡng vi phạm tối đa cho phép $\to$ \texttt{INVALID}
+    \item \small Trích \texttt{newAttributes}; trả về candidate với \texttt{removedAttributes}, \texttt{addedAttributes}
+  \end{enumerate}
+
+  \vspace{2mm}
+  \begin{alertblock}{Ràng buộc cấu trúc phải loại ngay}
+    \small Khách xuất hiện 0 hoặc $\ge 2$ lần; $C_1$ nằm trên drone; dùng phương tiện ngoài $K+D$; trip không bắt đầu/kết thúc tại depot; khách giao cho phương tiện không tương thích tĩnh.
+  \end{alertblock}
+\end{frame}
+
+\begin{frame}{ Chọn move}
+  \textbf{ Khi chưa tìm được nghiệm khả thi}\\
+  \small Mục tiêu chính: đưa nghiệm về vùng khả thi. Chọn move theo thứ tự từ điển:
+  $$\big(V_\Sigma(s'), \bar{C}_{\max}(s'), \text{Distance}(s')\big)$$
+
+  \vspace{3mm}
+  \textbf{ Khi đã có nghiệm khả thi}\\
+  \small Chọn theo:
+  $$\big(F_\lambda(s'), V_\Sigma(s'), \bar{C}_{\max}(s'), \text{Distance}(s')\big)$$
+
+  \vspace{3mm}
+  \begin{block}{SELECT\_BEST\_CANDIDATE}
+    \small Trong \texttt{admissiblePool} (không tabu, hoặc thoả aspiration), chọn candidate nhỏ nhất theo tiêu chí tương ứng ở trên. \hl{Move được chọn có thể xấu hơn nghiệm hiện tại} — đây là đặc trưng quan trọng giúp Tabu Search thoát khỏi tối ưu cục bộ.
+  \end{block}
+\end{frame}
+
+% ===================================================================
+\section{Sáu toán tử lân cận}
+
+\begin{frame}{1) Relocate \quad 2) Or-opt(2)}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Relocate}
+      \begin{itemize}
+        \item \small Lấy 1 khách $i$ khỏi vị trí hiện tại $[\ldots,p,i,q,\ldots]$.
+        \item \small Chèn vào mọi vị trí trong mọi trip tương thích của mọi xe, hoặc một trip mới.
+        \item \small Xoá cung $(p,i),(i,q)$, sinh cung $(p,q)$ tại nguồn; sinh cung mới tại vị trí chèn.
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Or-opt(2)}
+      \begin{itemize}
+        \item \small Di chuyển 1 block gồm 2 khách liên tiếp $[i_h, i_{h+1}]$ sang vị trí khác.
+        \item \small Giữ nguyên thứ tự trong block khi chèn.
+        \item \small Sinh giống Relocate nhưng đối tượng di chuyển là cả block, không tách rời từng khách.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{3) Swap \quad 4) 2-opt}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Swap}
+      \begin{itemize}
+        \item \small Hoán đổi 2 khách bất kỳ $i, j$ (có thể khác xe).
+        \item \small Điều kiện: $i$ tương thích tĩnh với xe của $j$ \emph{và} $j$ tương thích tĩnh với xe của $i$.
+        \item \small Bỏ qua move nếu hoán đổi không thay đổi gì (cùng vị trí, cùng xe).
+      \end{itemize}
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{2-opt}\\
+      \small Đảo ngược một đoạn trong cùng một trip:
+      $$[\ldots,i_p,i_{p+1},\ldots,i_q,\ldots] \to [\ldots,i_q,i_{q-1},\ldots,i_p,\ldots]$$
+      \begin{itemize}
+        \item \small Chỉ áp dụng trong nội bộ 1 trip, không đổi thứ tự trip.
+        \item \small Bỏ qua trường hợp $q = p+1$ nếu đảo không tạo thay đổi.
+      \end{itemize}
+    \end{column}
+  \end{columns}
+\end{frame}
+
+\begin{frame}{5) Cross-trip \quad 6) Trip-relocate}
+  \begin{columns}[T]
+    \begin{column}{0.5\textwidth}
+      \textbf{Cross-trip}\\
+      \small Chọn 2 trip, trao đổi 2 đoạn đuôi:
+      $$\sigma_a=[A_1|A_2],\ \sigma_b=[B_1|B_2] \to \sigma_a'=[A_1|B_2],\ \sigma_b'=[B_1|A_2]$$
+      \small Có thể cùng xe, khác xe, hoặc giữa truck \& drone (nếu tương thích tĩnh).
+    \end{column}
+    \begin{column}{0.5\textwidth}
+      \textbf{Trip-relocate}\\
+      \small Di chuyển \emph{nguyên cả một trip} sang:
+      \begin{itemize}
+        \item vị trí khác trong chuỗi trip của cùng xe
+        \item một xe tương thích khác
+        \item bất kỳ vị trí nào trong chuỗi trip của xe đích
+      \end{itemize}
+    \end{column}
+  \end{columns}
+  \vspace{3mm}
+  \begin{alertblock}{Chung cho cả 6 toán tử}
+    Mọi move được đánh giá tạm thời (deep copy) $\to$ tính lại lịch các xe bị ảnh hưởng (RECOMPUTE\_VEHICLE) $\to$ EVALUATE\_SOLUTION $\to$ loại nếu vi phạm ràng buộc \emph{cấu trúc}.
+  \end{alertblock}
+\end{frame}
+
+% ===================================================================
+\begin{frame}{Tạo trip mới \& huỷ trip rỗng}
+  \textbf{Tạo trip mới}
+  \begin{itemize}
+    \item Mọi toán tử di chuyển khách/block/trip (Relocate, Or-opt(2), Trip-relocate) đều cho phép \hl{tạo một trip mới} $[0, \ldots, 0]$ tại \emph{mọi vị trí} trong chuỗi trip $R_v$ của xe đích tương thích — không chỉ chèn vào trip đã tồn tại.
+    \item Vị trí trip mới trong $R_v$ là một phần của move: chèn ở vị trí $k$ sẽ dịch chuyển thời gian bắt đầu mọi trip từ $k{+}1$ trở đi ($t^{\text{start}}_{v,k} = r_{v,k-1}$).
+    \item Ví dụ: $R_v = (\sigma_{v1}, \sigma_{v2}) \to R_v' = (\sigma_{v1}, [0,i,0], \sigma_{v2})$.
+  \end{itemize}
+
+  \vspace{1mm}
+  \textbf{Huỷ trip rỗng}
+  \begin{itemize}
+    \item Sau khi áp dụng move, nếu trip nguồn bị rút hết khách $\to$ trip trở thành $[0,0]$ $\to$ \hl{xoá trip đó} khỏi $R_v$ trước khi tính lại lịch.
+    \item Trip rỗng không được giữ lại dưới bất kỳ hình thức nào trong nghiệm.
+  \end{itemize}
+
+  \vspace{1mm}
+  \begin{alertblock}{Thứ tự bắt buộc trong EVALUATE\_MOVE}
+    \small Áp dụng move (bản sao) $\to$ \hl{remove all empty trips} $\to$ kiểm tra ràng buộc cấu trúc $\to$ RECOMPUTE\_VEHICLE cho xe bị ảnh hưởng $\to$ EVALUATE\_SOLUTION.
+  \end{alertblock}
+\end{frame}
+
+\begin{frame}{Vì sao huỷ trip rỗng lại cần thiết}
+  \begin{itemize}
+    \item Trip rỗng \hl{không mang thông tin nghiệm} nhưng vẫn tốn một vị trí trong $R_v$ $\to$ sai lệch khi tính lại lịch (thời gian bắt đầu trip kế tiếp).
+    \item Nếu không xoá, các move sau (Trip-relocate, Cross-trip) có thể thao tác nhầm trên trip rỗng, sinh ra move vô nghĩa hoặc trùng lặp.
+    \item Việc xoá xảy ra \emph{trước} khi kiểm tra ràng buộc cấu trúc và tabu attributes — đảm bảo cung $(p, i)$, $(i, q)$ bị xoá và cung mới $(p,q)$ được ghi nhận đúng theo mục \hl{Thuộc tính cung}.
+  \end{itemize}
+
+  \vspace{1mm}
+  \small
+  \begin{block}{Ví dụ: Relocate khách $i$ ra khỏi trip $[\ldots,p,i,q,\ldots]$}
+    \begin{itemize}
+      \item Trip còn khách khác: mất cung $(p,i),(i,q)$, sinh cung mới $(p,q)$.
+      \item $i$ là khách \emph{duy nhất}: trip $[0,i,0] \to$ rỗng $\to$ \hl{bị xoá} khỏi $R_v$.
+    \end{itemize}
+  \end{block}
+\end{frame}
+
+% ===================================================================
+\section{Chọn candidate \& Tabu list}
+
+\begin{frame}{Chọn candidate để giảm thời gian tính}
+  \small Phiên bản đầu tiên sinh \hl{toàn bộ move} để kiểm tra tính đúng đắn. Sau đó mới giới hạn candidate.
+
+  \vspace{2mm}
+  \textbf{7.1. Khi chưa có nghiệm khả thi} — ưu tiên chọn:
+  \begin{itemize}
+    \item \small Khách có đóng góp lớn vào $V_{TW}$
+    \item \small Khách có đóng góp lớn vào $V_W$
+    \item \small Khách thuộc trip vượt tải
+    \item \small Khách thuộc trip drone vượt tầm bay
+    \item \small Một tỷ lệ khách chọn ngẫu nhiên
+  \end{itemize}
+
+  \vspace{2mm}
+  \textbf{7.2. Khi đã có nghiệm khả thi} — xác định tập phương tiện critical:
+  $$\mathcal{V}^{\text{crit}} = \{v : C_v(s) = C_{\max}(s)\}$$
+  \small Ưu tiên khách/trip thuộc các xe này, kèm thêm một tỷ lệ nhỏ nguồn ngẫu nhiên toàn hệ thống. Đích của move luôn được xét trên tất cả phương tiện và trip tương thích.
+\end{frame}
+
+\begin{frame}{Danh sách Tabu — Thuộc tính}
+  \textbf{9.1. Thuộc tính cung (Arc)}\\
+  \small Mỗi cung: $(\text{vehicleId}, \text{fromNode}, \text{toNode})$ — tính cả cung Depot$\to$khách đầu, giữa hai khách, khách cuối$\to$Depot.
+
+  \vspace{1mm}
+  \small Ví dụ: Relocate khách $i$ khỏi $[\ldots,p,i,q,\ldots]$ sẽ xoá $(p,i),(i,q)$ và tạo $(p,q)$. Move đảo ngược phải tái tạo $(p,i)$ và $(i,q)$ $\to$ bị tabu.
+
+  \vspace{2mm}
+  \textbf{9.2. Thuộc tính phân công (Assignment)}\\
+  \small Nếu khách $i$ chuyển từ xe $v_a$ sang $v_b$: lưu \texttt{("ASSIGN", customerId=i, forbiddenVehicle=}$v_a$\texttt{)} — trong thời hạn tabu, $i$ không được quay lại $v_a$, trừ khi thoả aspiration.
+
+  \vspace{2mm}
+  \textbf{9.3. Thuộc tính thứ tự trip (Trip Order)}\\
+  \small Với Trip-relocate: lưu \texttt{("TRIP\_RETURN", tripUid, sourceVehicleId, sourcePredecessorTripUid)} — ngăn đưa trip quay ngay về vị trí cũ.
+\end{frame}
+
+\begin{frame}{Danh sách Tabu — Tenure \& kiểm tra}
+  \textbf{9.4. Tabu tenure}
+  $$\tau \sim U[\tau_0, 2\tau_0], \qquad \tau_0 = 7 \text{ }$$
+  \small \texttt{tenure ← RANDOM\_INTEGER(tau0, 2×tau0)}\\
+  \small \texttt{tabuUntil[attribute] ← currentIteration + tenure}
+s
+  \vspace{3mm}
+  \textbf{9.5. Kiểm tra tabu}
+  \begin{itemize}
+    \item \small Với mỗi thuộc tính $a$ trong \texttt{candidate.addedAttributes}: nếu \texttt{tabuUntil[a] > iteration} $\to$ candidate bị tabu.
+  \end{itemize}
+
+  \vspace{3mm}
+  \textbf{9.6. Ghi tabu sau khi thực hiện move}
+  \begin{itemize}
+    \item \small Sinh tenure ngẫu nhiên mới, gán \texttt{tabuUntil[a] ← iteration + tenure} cho mỗi thuộc tính vừa bị \hl{xoá} bởi move đã chọn (\texttt{selectedCandidate.removedAttributes}).
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Aspiration criterion}
+  \small Move tabu vẫn được phép thực hiện trong hai trường hợp.
+
+  \vspace{2mm}
+  \textbf{10.1. Đã có nghiệm khả thi}\\
+  \small Candidate khả thi \emph{và} cải thiện makespan tốt nhất:
+  $$V_\Sigma(s') = 0 \quad \text{và} \quad C_{\max}(s') < C_{\max}(s^*)$$
+
+  \vspace{2mm}
+  \textbf{10.2. Chưa có nghiệm khả thi}\\
+  \small Candidate cải thiện nghiệm không khả thi tốt nhất theo thứ tự từ điển:
+  $$\big(V_\Sigma(s'), C_{\max}(s'), \text{Distance}(s')\big) < \big(V_\Sigma(s^I), C_{\max}(s^I), \text{Distance}(s^I)\big)$$
+
+  \vspace{2mm}
+  \begin{alertblock}{Không dùng điều kiện $F_\lambda(s') < F_\lambda(s^*)$}
+    \small Vì hệ số phạt $\lambda$ thay đổi liên tục trong quá trình tìm kiếm (Strategic Oscillation), so sánh trực tiếp theo $F_\lambda$ không còn ý nghĩa nhất quán.
+  \end{alertblock}
+\end{frame}
+
+% ===================================================================
+
+
+\end{document}

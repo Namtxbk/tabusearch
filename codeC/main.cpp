@@ -41,7 +41,7 @@ static void printSolution(const Instance& inst, const Solution& s) {
 
 int main(int argc, char** argv) {
     std::string path = (argc > 1) ? argv[1] : "6_5_1.json";
-    double maxWaitOverride = (argc > 2) ? std::stod(argv[2]) : -1.0; 
+    double maxWaitOverride = (argc > 2) ? std::stod(argv[2]) : -1.0;
 
     try {
         Instance inst = readJsonInstance(path);
@@ -49,6 +49,8 @@ int main(int argc, char** argv) {
             inst.max_wait = maxWaitOverride;
             std::cout << "[debug] override max_wait = " << maxWaitOverride << "\n";
         }
+        std::cout << "L_D = " << inst.drone_flight_time << " (thoi gian bay) x " << inst.drone_speed
+                  << " (van toc) = " << inst.drone_range << " (quang duong)\n";
         std::cout << "Instance: " << inst.name
                   << " | customers=" << inst.numCustomers()
                   << " | trucks=" << inst.num_trucks
@@ -57,7 +59,7 @@ int main(int argc, char** argv) {
         TabuSearchParams params;
         params.maxIterations = 2000;
         params.timeLimitSeconds = 200000.0;
-        params.stoppingStagnation = 500;
+        params.stoppingStagnation = 5000;
         // 360 quá cao so với tổng số iteration khả dụng trong ngân sách thời gian (n lớn chỉ chạy
         // được ~100-400 iteration/20s) -> ruin-recreate gần như không bao giờ được kích hoạt.
         // Hạ xuống để search có cơ hội thoát local optimum trong cùng ngân sách thời gian.

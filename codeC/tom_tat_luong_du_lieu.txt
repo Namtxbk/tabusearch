@@ -1,0 +1,282 @@
+TÓM TẮT LUỒNG DỮ LIỆU - ADAPTIVE TABU SEARCH CHO MVRPD-TW
+(Truck + Drone, nhiều chuyến, cửa sổ thời gian, giới hạn thời gian chờ hàng)
+=====================================================================
+
+SƠ ĐỒ TỔNG QUAN
+---------------
+  File JSON --> Instance --> Nghiệm ban đầu s0 --> Vòng lặp Tabu --> Nghiệm tốt nhất --> In kết quả + Kiểm tra
+                             (chèn tham lam)      (current, λ, danh sách tabu)
+
+
+1. ĐỌC DỮ LIỆU  (instance.hpp)
+------------------------------
+- Lệnh chạy: solver.exe <file.json> [max_wait]
+- Mỗi khách: [x, y, demand, ableServiceByDrone, r_i(bỏ qua), open, close]
+    -> Customer {id, x, y, demand q_i, ready e_i, due l_i}
+    -> C1 = chỉ truck phục vụ được, C2 = drone phục vụ được
+- Thông số xe: số truck, số drone, tải trọng M_T / M_D,
+  L_D = thời gian bay tối đa của drone (giây, KHÔNG phải quãng đường),
+  L_w = thời gian chờ tối đa của hàng, vận tốc truck / drone.
+- distMat: ma trận khoảng cách Euclid (n+1)x(n+1), node 0 = depot.
+- Instance chỉ được đọc, không bao giờ bị sửa sau bước này.
+
+
+2. NGHIỆM BAN ĐẦU  (construction.hpp)
+-------------------------------------
+- Mỗi xe ban đầu chưa có chuyến nào.
+- Sắp khách theo hạn chót l_i tăng dần (EDD).
+- Lần lượt chèn từng khách vào vị trí tốt nhất trên mọi xe / mọi chuyến:
+    + Có vị trí không làm trễ hạn -> chọn vị trí có makespan nhỏ nhất.
+    + Không có -> chọn theo (độ trễ, makespan, quãng đường).
+- Tính H = max{1, C_max(s0), max l_i}. H dùng để chuẩn hoá, KHÔNG đổi suốt quá trình.
+- s0 khả thi -> bestFeasible (s*_F); không khả thi -> bestInfeasible (s*_I).
+
+
+3. CẤU TRÚC MỘT NGHIỆM  (solution.hpp)
+--------------------------------------
+  Solution
+   ├─ danh sách Vehicle (truck/drone)
+   │    └─ danh sách Trip: depot -> i1 -> i2 -> ... -> depot
+   │         (startTime, returnTime, load, flightTime, arrivalTime, waitingTime)
+   └─ makespan, các vi phạm V_Q, V_D, V_TW, V_W, số khách chưa phục vụ, F_λ
+
+- Một xe chạy nhiều chuyến nối tiếp: chuyến sau bắt đầu khi chuyến trước về depot.
+- Tối ưu tốc độ:
+    + Copy nghiệm chỉ copy con trỏ xe; xe nào bị sửa mới clone riêng (copy-on-write).
+    + Mỗi xe lưu sẵn vi phạm "thô" -> tổng hợp nghiệm chỉ cần cộng theo số xe.
+
+
+4. TÍNH LỊCH & HÀM MỤC TIÊU  (schedule.hpp, evaluate.hpp)
+---------------------------------------------------------
+Tính lịch cho 1 xe (chỉ từ chuyến bị thay đổi trở đi):
+    thời điểm đến khách:  a_i = max(e_i, a_trước + thời gian di chuyển)
+    thời gian chờ hàng:   w_i = returnTime của chuyến - a_i
+
+Các vi phạm (đều chia cho n):
+    V_Q  = Σ max(0, load - M) / M              vượt tải trọng
+    V_D  = Σ max(0, flightTime - L_D) / L_D    drone bay quá lâu
+    V_TW = Σ max(0, a_i - l_i) / H             đến trễ hạn
+    V_W  = Σ max(0, w_i - L_w) / L_w           hàng chờ quá lâu
+
+Hàm mục tiêu có phạt:
+    F_λ = C_max/H + λ_Q·V_Q + λ_D·V_D + λ_TW·V_TW + λ_W·V_W + 1000·(số khách chưa phục vụ / n)
+
+Nghiệm khả thi <=> tổng vi phạm <= 1e-9 VÀ mọi khách đều được phục vụ.
+Mục tiêu cuối cùng: giảm C_max (makespan = thời điểm xe cuối cùng về depot).
+
+
+5. MỘT VÒNG LẶP TABU  (tabu_search.hpp)
+---------------------------------------
+B1. Chọn vùng tìm kiếm (select_components.hpp)
+    - Chưa có s*_F: tập trung vào khách / chuyến đang vi phạm + 30% ngẫu nhiên.
+    - Đã có s*_F: tập trung vào xe "critical" (xe có C_v = C_max) + 30% ngẫu nhiên.
+
+B2. Sinh move bằng 6 toán tử (operators.hpp)
+    Relocate     : chuyển 1 khách sang vị trí khác
+    Or-opt(2)    : chuyển 2 khách liên tiếp
+    Swap         : đổi chỗ 2 khách
+    2-opt        : đảo ngược 1 đoạn trong 1 chuyến
+    Cross-trip   : đổi phần đuôi của 2 chuyến (có thể khác xe)
+    Trip-Relocate: chuyển nguyên 1 chuyến sang vị trí / xe khác
+    (chi tiết từng move: xem mục 9)
+
+B3. Đánh giá từng move (evaluate_move.hpp)
+    copy current -> áp dụng move -> tính lại lịch các xe bị chạm
+    -> loại nếu sai cấu trúc (khách trùng / thiếu, khách C1 trên drone, xe không phù hợp)
+    -> tính F_λ -> loại nếu tổng vi phạm > 5.0
+    -> ghi nhận thuộc tính bị XOÁ và được THÊM (để dùng cho tabu)
+    => danh sách candidate
+
+B4. Lọc tabu (tabu.hpp)
+    - Candidate bị tabu nếu nó THÊM LẠI một thuộc tính vừa bị xoá gần đây.
+      Thuộc tính gồm: cung (xe, từ, đến), gán khách vào xe, vị trí của chuyến.
+    - Aspiration: vẫn cho phép nếu candidate tốt hơn nghiệm tốt nhất
+      (có s*_F: khả thi và C_max nhỏ hơn; chưa có: tốt hơn s*_I).
+    - Nếu không còn candidate nào: giải phóng mục tabu sắp hết hạn nhất.
+
+B5. Chọn candidate tốt nhất (select_move.hpp), so sánh lần lượt từng tiêu chí:
+    - Chưa có s*_F: (tổng vi phạm, C_max/H, quãng đường)   -> ưu tiên đạt khả thi
+    - Đã có s*_F  : (F_λ, tổng vi phạm, C_max/H, quãng đường) -> ưu tiên giảm makespan
+    => current = candidate được chọn
+
+B6. Ghi tabu: các thuộc tính vừa bị xoá bị cấm trong τ vòng, τ ngẫu nhiên trong [7, 14].
+
+B7. Cập nhật nghiệm tốt nhất (best_solutions.hpp)
+    - Có cải thiện -> hDiv = 0, hStop = 0
+    - Không cải thiện -> hDiv++, hStop++
+
+B8. Strategic Oscillation (strategic_oscillation.hpp), cứ mỗi 20 vòng:
+    với từng ràng buộc (Q, D, TW, W), tỉ lệ số vòng khả thi:
+      < 20%  -> λ × 1.5   (phạt nặng hơn, kéo về vùng khả thi)
+      > 80%  -> λ × 0.85  (phạt nhẹ hơn, cho phép đi qua vùng không khả thi)
+    λ nằm trong khoảng [0.001, 1000].
+    => λ mới ảnh hưởng đến F_λ ở các vòng sau (vòng phản hồi).
+
+
+6. ĐA DẠNG HOÁ - RUIN & RECREATE  (ruin_recreate.hpp)
+-----------------------------------------------------
+Kích hoạt khi hDiv >= H_div (H_div = 30 trong main.cpp hiện tại):
+  - Ruin: gỡ khoảng 15% số khách
+      (khách vi phạm nhiều + khách trên xe critical + chọn ngẫu nhiên)
+  - Recreate: chèn lại các khách theo hạn chót (có xáo trộn nhẹ), chèn vào vị trí tốt nhất.
+  - Thất bại -> giảm tỉ lệ gỡ (×0.8, tối thiểu 5%), thử lại tối đa 5 lần.
+  - Thành công -> current = nghiệm mới, xoá danh sách tabu.
+  - hDiv luôn được reset về 0 sau mỗi lần thử.
+
+
+7. DỪNG & KẾT QUẢ
+-----------------
+Dừng khi: đủ maxIterations (2000) HOẶC hết thời gian HOẶC hStop >= 500.
+Trả về: s*_F nếu có; nếu không thì s*_I; nếu không nữa thì current.
+main.cpp in ra: makespan, quãng đường, các vi phạm, từng xe -> từng chuyến -> dãy khách,
+sau đó validator.hpp kiểm tra lại độc lập toàn bộ nghiệm.
+
+
+8. THAM SỐ ĐANG DÙNG  (main.cpp + giá trị mặc định trong tabu_search.hpp)
+-------------------------------------------------------------------------
+  maxIterations             = 2000
+  timeLimitSeconds          = 200000   (coi như không giới hạn thời gian)
+  stoppingStagnation        = 500      (H_stop)
+  diversificationStagnation = 30       (H_div)
+  baseTabuTenure            = 7        (τ0, τ ~ U[7, 14])
+  penaltySegmentLength      = 20       (chu kỳ cập nhật λ)
+  ruinRate                  = 0.15
+  ruinMaxAttempts           = 5
+  maxAllowedInfeasibility   = 5.0
+  randomSeed                = 42
+
+
+9. CHI TIẾT 6 MOVE  (operators.hpp, evaluate_move.hpp)
+------------------------------------------------------
+9.0 Hai điều cần biết trước
+  - Mỗi xe chạy NHIỀU CHUYẾN NỐI TIẾP; chuyến sau chỉ xuất phát khi chuyến trước về depot.
+    => sửa 1 chuyến làm lịch của mọi chuyến SAU nó trên cùng xe thay đổi theo.
+       Xe T1:  [0 → 3 → 5 → 0] → [0 → 2 → 0] → [0 → 7 → 1 → 0]
+                  chuyến 0          chuyến 1       chuyến 2
+  - Move KHÔNG lấy từ toàn bộ nghiệm, mà từ 2 danh sách do selectSearchComponents chọn:
+      selectedCustomers -> nguồn cho Relocate, Swap
+      selectedTrips     -> nguồn cho Or-opt, 2-opt, Cross-trip, Trip-Relocate
+    + Chưa có nghiệm khả thi: khoảng n/3 khách vi phạm TW+W nặng nhất
+                              + khách trên chuyến vượt tải / vượt tầm bay + 30% ngẫu nhiên;
+                              chuyến = các chuyến chứa những khách đó.
+    + Đã có nghiệm khả thi:   khách & mọi chuyến của xe critical (C_v = C_max)
+                              + 30% khách ngẫu nhiên + 30% chuyến ngẫu nhiên.
+
+9.1 Relocate - chuyển 1 khách
+  Lấy khách i khỏi chỗ cũ, chèn vào mọi vị trí của mọi chuyến trên xe tương thích,
+  HOẶC tạo 1 chuyến MỚI chỉ chứa i ở bất kỳ vị trí nào trong chuỗi chuyến của xe.
+      Trước: T1: [0 → 3 → 5 → 8 → 0]     D1: [0 → 2 → 0]
+      Move : chuyển 5 sang D1, vị trí 1
+      Sau  : T1: [0 → 3 → 8 → 0]         D1: [0 → 2 → 5 → 0]
+      (hoặc chuyến mới:  D1: [0 → 5 → 0] → [0 → 2 → 0])
+  - Điều kiện: xe đích tương thích tĩnh. Drone chỉ nhận khách C2 có q_i <= M_D,
+    bay khứ hồi <= L_D và thời gian bay về <= L_w.
+  - Giới hạn: tối đa 80 vị trí đích / khách (nhiều hơn thì lấy mẫu ngẫu nhiên).
+  - Tác dụng: cân bằng tải, chuyển khách khỏi xe critical, gỡ khách gây trễ hạn.
+
+9.2 Or-opt(2) - chuyển 2 khách liền kề
+  Như Relocate nhưng di chuyển khối (p, p+1), giữ nguyên thứ tự trong khối.
+      Trước: T1: [0 → 3 → 5 → 8 → 0]     T2: [0 → 4 → 0]
+      Move : khối (3,5) sang T2 sau 4
+      Sau  : T1: [0 → 8 → 0]             T2: [0 → 4 → 3 → 5 → 0]
+  - Điều kiện: xe đích tương thích với CẢ 2 khách.
+  - Giới hạn: tối đa 80 vị trí đích / khối.
+  - Tác dụng: giữ được cung 3→5 (2 khách gần nhau) khi chuyển, điều mà
+    2 lần Relocate rời rạc khó làm được.
+
+9.3 Swap - đổi chỗ 2 khách
+  Đổi vị trí khách i và j (cùng chuyến / khác chuyến / khác xe đều được).
+      Trước: T1: [0 → 3 → 5 → 0]     D1: [0 → 2 → 0]
+      Move : swap(5, 2)
+      Sau  : T1: [0 → 3 → 2 → 0]     D1: [0 → 5 → 0]
+  - Điều kiện: i phục vụ được bằng xe của j và ngược lại.
+  - Giới hạn: mọi cặp trong selectedCustomers; nhiều hơn 600 cặp thì lấy mẫu 600.
+  - Tác dụng: số khách mỗi chuyến không đổi -> tải gần như giữ nguyên;
+    hợp để sửa thứ tự / trễ hạn mà không làm chuyến khác quá tải.
+
+9.4 2-opt - đảo ngược một đoạn trong 1 chuyến
+  Đảo thứ tự khách từ vị trí p đến q trong CÙNG một chuyến.
+      Trước: [0 → 3 → 5 → 8 → 6 → 0]
+      Move : p = 0, q = 2   (đảo đoạn 3, 5, 8)
+      Sau  : [0 → 8 → 5 → 3 → 6 → 0]
+  - Tập khách, tải, xe không đổi; chỉ đổi thứ tự.
+  - Giới hạn: xét hết mọi cặp (p, q), không lấy mẫu.
+  - Tác dụng: gỡ cung đi chéo, rút ngắn quãng đường và thời gian về depot
+    (giảm V_W và C_v); thứ tự đến thay đổi nên có thể sửa trễ TW.
+
+9.5 Cross-trip - đổi phần đuôi của 2 chuyến
+  Cắt chuyến A tại cutA, chuyến B tại cutB, rồi đổi 2 phần đuôi cho nhau.
+      Trước: A: [0 → 1 → 2 | 3 → 4 → 0]     B: [0 → 7 | 8 → 0]
+      Move : cutA = 2, cutB = 1
+      Sau  : A: [0 → 1 → 2 → 8 → 0]         B: [0 → 7 → 3 → 4 → 0]
+  - Phạm vi: bất kỳ 2 chuyến nào trong selectedTrips, cùng xe hay khác xe đều được.
+  - Trường hợp đặc biệt: một đuôi rỗng (cut = độ dài chuyến) = nối nguyên đuôi chuyến kia
+    vào cuối; cut = 0 = chuyển cả chuyến; cả 2 đuôi rỗng thì bỏ.
+  - Điều kiện: mọi khách ở đuôi A tương thích với xe B và ngược lại.
+  - Giới hạn: 40 tổ hợp (cutA, cutB) / cặp chuyến, tối đa 800 move / vòng lặp.
+  - Tác dụng: thay đổi lớn hơn, chuyển nhiều khách cùng lúc; san tải, tách chuyến quá dài.
+
+9.6 Trip-Relocate - chuyển nguyên 1 chuyến
+  Lấy cả chuyến (giữ uid và thứ tự khách) đặt sang vị trí khác trong chuỗi chuyến
+  của cùng xe hoặc của xe khác.
+      Trước: T1: [A] → [B] → [C]        T2: [D]
+      Cùng xe:  A sang vị trí 1   ->  T1: [B] → [A] → [C]
+      Khác xe:  C sang T2         ->  T1: [A] → [B]     T2: [D] → [C]
+  - Điều kiện: xe đích tương thích với MỌI khách trong chuyến
+    (chuyến có khách C1 không thể sang drone).
+  - Giới hạn: không lấy mẫu, xét mọi vị trí trên mọi xe.
+  - Tác dụng (đặc thù bài toán nhiều chuyến):
+      + cùng xe: đổi thứ tự chuyến, cho chuyến có khách hạn sớm chạy trước -> giảm trễ TW;
+      + khác xe: chuyển khối việc lớn từ xe critical sang xe rảnh -> giảm C_max trực tiếp.
+
+9.7 Một move được đánh giá thế nào (evaluateMove)
+  1. sPrime = copy current             (chỉ copy con trỏ xe)
+  2. applyMove(sPrime, m)              (xe bị sửa mới được clone riêng)
+  3. removeEmptyTrips                  (xoá chuyến rỗng sau khi gỡ khách)
+  4. Kiểm tra cấu trúc trên các xe bị chạm:
+       khách trùng, id sai, khách C1 trên drone, không tương thích tĩnh  -> LOẠI
+  5. recomputeVehicle cho các xe bị chạm (tính lại từ chuyến 0)
+  6. Đếm khách: thiếu hoặc thừa                                        -> LOẠI
+  7. aggregateSolutionMetrics -> V_Q, V_D, V_TW, V_W, C_max, F_λ
+  8. Tổng vi phạm > 5.0                                                -> LOẠI
+  9. diffTabuAttributes -> removedAttributes / addedAttributes
+  => Ràng buộc CỨNG (bước 4, 6) bị loại ngay; ràng buộc MỀM (tải, tầm bay, TW, chờ)
+     chỉ bị phạt qua λ, nên tìm kiếm được phép đi qua vùng không khả thi.
+
+9.8 Thuộc tính tabu mà mỗi move sinh ra
+  Mọi move                       : ARC (xe, từ, đến) - các cung bị xoá / thêm ở chuyến thay đổi
+  Relocate / Or-opt sang xe khác : ASSIGN (khách, xe cũ) - cấm đưa khách quay lại xe cũ
+  Swap giữa 2 xe                 : ASSIGN cho cả 2 khách
+  Trip-Relocate sang xe khác     : TRIP_RETURN (uid chuyến, xe cũ, chuyến đứng trước)
+                                   - cấm đưa chuyến về chỗ cũ
+  Thuộc tính bị XOÁ khi thực hiện move được ghi vào tabu trong τ ∈ [7, 14] vòng.
+  Candidate sau này bị tabu nếu nó THÊM LẠI một thuộc tính đó (tức là đi ngược move vừa làm).
+
+9.9 So sánh nhanh
+  Toán tử       | Số khách đổi chỗ | Đổi xe | Tạo chuyến mới | Đổi thứ tự chuyến | Lấy mẫu khi lớn
+  --------------+------------------+--------+----------------+-------------------+------------------
+  Relocate      | 1                | có     | có             | -                 | 80 / khách
+  Or-opt(2)     | 2                | có     | có             | -                 | 80 / khối
+  Swap          | 2                | có     | -              | -                 | 600 cặp
+  2-opt         | đoạn p..q        | -      | -              | -                 | không
+  Cross-trip    | 2 đuôi           | có     | -              | -                 | 40 / cặp, 800 tổng
+  Trip-Relocate | cả chuyến        | có     | -              | có                | không
+
+9.10 Những điểm trong code có thể là lỗi (chưa sửa)
+  1. select_components.hpp: điều kiện drone "vượt tầm" so sánh travelDistance > drone_range,
+     nhưng ở chỗ khác code coi L_D là THỜI GIAN BAY (schedule.hpp so sánh flightTime).
+     Khi vận tốc drone khác 1, bước chọn vùng tìm kiếm có thể bỏ sót chuyến drone vi phạm V_D.
+  2. 2-opt bỏ qua q = p+1 (comment ghi "đảo 1 phần tử"), nhưng đoạn [p..p+1] có 2 phần tử:
+     đảo nó = đổi chỗ 2 khách kề nhau. Move này bị mất (trừ khi Swap tình cờ chọn đúng cặp).
+  3. Or-opt trong cùng chuyến: bỏ qua vị trí chèn p..p+2, nhưng sau khi gỡ khối chỉ vị trí p
+     mới là "không đổi"; p+1 và p+2 là move thật nhưng bị bỏ.
+  4. Relocate / Or-opt trong cùng chuyến sinh vị trí chèn theo độ dài chuyến TRƯỚC khi gỡ
+     -> các vị trí cuối bị cắt về cùng một chỗ, một số move giống nhau bị đánh giá nhiều lần
+     (tốn thời gian, không sai kết quả).
+
+
+Ý TƯỞNG CỐT LÕI (1 câu)
+-----------------------
+Cho phép nghiệm tạm thời vi phạm ràng buộc nhưng bị phạt với trọng số λ tự điều chỉnh;
+danh sách tabu ngăn quay lại nghiệm cũ; khi bị kẹt lâu thì phá một phần nghiệm rồi xây lại
+để tìm nghiệm khả thi có makespan nhỏ nhất.
