@@ -55,7 +55,23 @@ struct TabuSearchResult {
     Solution best;      // bestFeasible nếu tìm được, ngược lại bestInfeasible (diagnostic)
     long long iterations = 0;
     double elapsedSeconds = 0.0;
+
+    // Chỉ để báo cáo (không ảnh hưởng thuật toán):
+    bool hasBestFeasible = false;
+    Solution bestFeasible;   // lời giải hợp lệ tốt nhất (makespan nhỏ nhất)
+    bool hasBestAny = false;
+    Solution bestAny;        // lời giải makespan nhỏ nhất đã duyệt (phục vụ đủ khách), có thể vi phạm
 };
+
+// Theo dõi lời giải có makespan nhỏ nhất trong mọi lời giải đã duyệt (kể cả không khả thi).
+// Chỉ xét lời giải đã phục vụ hết khách, nếu không makespan không có ý nghĩa so sánh.
+inline void trackBestAny(const Solution& s, std::unique_ptr<Solution>& bestAny) {
+    if (s.unassignedCount != 0) return;
+    if (bestAny == nullptr || s.makespan < bestAny->makespan - EPS ||
+        (std::fabs(s.makespan - bestAny->makespan) <= EPS && s.totalViolation < bestAny->totalViolation)) {
+        bestAny = std::make_unique<Solution>(s);
+    }
+}
 
 inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearchParams& params) {
     using clock = std::chrono::steady_clock;
@@ -81,6 +97,8 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     } else {
         bestInfeasible = std::make_unique<Solution>(current);
     }
+    std::unique_ptr<Solution> bestAny; // chỉ để báo cáo
+    trackBestAny(current, bestAny);
 
     // 6. tabuUntil
     TabuList tabuList;
@@ -121,6 +139,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
             hDiv = 0;
 
             bool improved = updateBestSolutions(current, bestFeasible, bestInfeasible);
+            trackBestAny(current, bestAny);
             if (improved) hStop = 0; else hStop += 1;
 
             logIterationDebug(iteration, current); // [DEBUG LOG - có thể xoá]
@@ -181,6 +200,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
 
         // 31-32. Cập nhật nghiệm tốt nhất
         bool improved = updateBestSolutions(current, bestFeasible, bestInfeasible);
+        trackBestAny(current, bestAny);
         if (improved) { hDiv = 0; hStop = 0; }
         else { hDiv += 1; hStop += 1; }
 
@@ -199,6 +219,8 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     TabuSearchResult result;
     result.iterations = iteration;
     result.elapsedSeconds = elapsedSeconds();
+    if (bestFeasible != nullptr) { result.hasBestFeasible = true; result.bestFeasible = *bestFeasible; }
+    if (bestAny != nullptr) { result.hasBestAny = true; result.bestAny = *bestAny; }
 
     if (bestFeasible != nullptr) {
         result.foundFeasible = true;
