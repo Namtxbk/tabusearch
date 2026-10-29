@@ -22,13 +22,22 @@ theo đúng pseudocode trong tài liệu `thuat_toan_tabu_search_NAM.pdf`.
 | `best_solutions.hpp`          | UPDATE_BEST_SOLUTIONS + stagnation counters (mục 13)                   |
 | `construction.hpp`            | Init solution (construction heuristic) + hàm insertion dùng chung      |
 | `ruin_recreate.hpp`           | Ruin & Recreate (mục 14)                                                |
-| `candidate_pool.hpp`          | BUILD_CANDIDATE_POOL (mục 15)                                          |
+| `candidate_pool.hpp`          | BUILD_CANDIDATE_POOL (mục 15) + 3 chế độ sinh lân cận all/random/seq   |
 | `tabu_search.hpp`             | ADAPTIVE_TABU_SEARCH — vòng lặp chính (mục 16)                         |
-| `main.cpp`                    | Entry point: đọc instance, chạy solver, in kết quả                     |
+| `main.cpp`                    | Entry point: đọc tham số dòng lệnh, chạy solver, ghi record/report     |
+| `run_all.bat`                 | Build + chạy tất cả `data/` (chế độ all)                              |
+| `run_compare.bat`             | Build + chạy so sánh 3 chế độ all / random / seq                       |
 | `json.hpp`                    | Thư viện nlohmann/json (single header, MIT license)                    |
 
 ## Build (MSYS2/MinGW hoặc Linux g++)
 
+PowerShell (Windows, MSYS2 ucrt64), chạy trong thư mục `codeC`:
+```powershell
+$env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
+g++ -std=c++17 -O2 -static main.cpp -o solver.exe
+```
+
+Linux / Git Bash:
 ```bash
 g++ -std=c++17 -O2 -Wall -Wextra -o solver main.cpp
 ```
@@ -36,18 +45,147 @@ g++ -std=c++17 -O2 -Wall -Wextra -o solver main.cpp
 ## Chạy
 
 ```bash
-./solver <path_to_instance.json> [override_max_wait]
+./solver [path_to_instance.json] [override_max_wait] [--mode=...] [--sample=N] [--seed=N] [--iter=N] [--time=S]
 ```
 
+- Không truyền file: chạy **tất cả** file `*.json` trong thư mục `data/`.
 - `override_max_wait` (tuỳ chọn, số thực): override tạm giá trị L_w để test/debug —
-  bỏ qua nếu không truyền, solver sẽ dùng `max_wait` mặc định = 60 (theo `instance.py`),
-  hoặc trường `"max_wait"` nếu có trong JSON.
+  bỏ qua nếu không truyền, solver dùng trường `"max_wait"` trong JSON (mặc định 3600).
+- Các tuỳ chọn `--...` đặt ở vị trí nào cũng được:
 
-Ví dụ:
-```bash
-./solver easy_test.json           # dùng L_w mặc định = 60
-./solver 6_5_1.json 400           # test với L_w = 400
+| Tuỳ chọn | Ý nghĩa | Mặc định |
+|---|---|---|
+| `--mode=all\|random\|seq` | Cách sinh lân cận (xem mục bên dưới) | `all` |
+| `--sample=N` | Số move tối đa lấy mẫu ngẫu nhiên từ toán tử được chọn (chỉ dùng cho `random`/`seq`; `0` = lấy hết) | `100` |
+| `--seed=N` | Seed ngẫu nhiên | `42` |
+| `--iter=N` | Số vòng lặp tối đa | `2000` |
+| `--time=S` | Giới hạn thời gian cho mỗi instance (giây) | không giới hạn |
+
+Kết quả:
+- `record/<instance>_<tag>_<ngay-gio>.txt`: chi tiết từng instance (debug log, lời giải, validator).
+  Ở chế độ `random`/`seq` có thêm dòng `Operator usage`, tức số vòng lặp mà mỗi toán tử được dùng.
+- `report/report_<tag>_<ngay-gio>.txt`: bảng tổng hợp tất cả instance của lần chạy đó
+  (dòng đầu ghi chế độ, sample, seed, iter, time).
+- `<tag>` gồm chế độ, sample và seed, ví dụ `all_seed42` hay `seq_sample100_seed3`.
+  Nhờ vậy các lần chạy khác seed/sample trong cùng 1 phút không ghi đè file của nhau.
+
+## Lệnh chạy mẫu (PowerShell, trong thư mục `codeC`)
+
+Tất cả lệnh dưới đây cần build `solver.exe` trước (xem mục Build). Muốn dùng trong Git Bash
+thì thay `.\solver.exe` bằng `./solver.exe` và `data\` bằng `data/`.
+
+### 1. Chạy cơ bản (chế độ gốc `all`)
+
+```powershell
+# Chạy tất cả file trong data\
+.\solver.exe
+
+# Chạy 1 file
+.\solver.exe data\10.10.1.json
+
+# Chạy 1 file với L_w = 400 (override max_wait)
+.\solver.exe data\10.10.1.json 400
+
+# Đặt số vòng lặp và giới hạn thời gian
+.\solver.exe data\50.10.1.json --iter=5000 --time=60
 ```
+
+### 2. Chế độ chọn toán tử ngẫu nhiên (`random`)
+
+```powershell
+# 1 file
+.\solver.exe data\50.10.1.json --mode=random --sample=1000 --time=3000 --iter=1000000000
+
+# Tất cả data\
+.\solver.exe --mode=random --sample=10000 --time=3000 --iter=1000000000
+```
+
+### 3. Chế độ tuần tự (`seq`)
+
+```powershell
+# 1 file
+.\solver.exe data\50.10.1.json --mode=seq --sample=1000 --time=3000 --iter=1000000000
+
+# Tất cả data\
+.\solver.exe --mode=seq --sample=1000 --time=3000 --iter=1000000000
+```
+
+### 4. So sánh 3 chế độ với cùng ngân sách thời gian
+
+```powershell
+# Cách 1: dùng script có sẵn (tự build + chạy cả 3 chế độ trên tất cả data\)
+.\run_compare.bat
+
+# Cách 2: chạy tay trên 1 file
+foreach ($m in "all", "random", "seq") {
+    .\solver.exe data\50.10.1.json --mode=$m --sample=1000 --time=3000 --iter=1000000000
+}
+```
+
+### 5. Chạy nhiều seed (để lấy trung bình / tốt nhất)
+
+```powershell
+# seq với seed 1..5 trên tất cả data\
+foreach ($s in 1..5) {
+    .\solver.exe --mode=seq --sample=1000 --seed=$s --time=3000 --iter=1000000000
+}
+
+# Cả random và seq, seed 1..5, trên 1 file
+foreach ($m in "random", "seq") {
+    foreach ($s in 1..5) {
+        .\solver.exe data\50.10.1.json --mode=$m --sample=1000 --seed=$s --time=3000 --iter=1000000000
+    }
+}
+```
+
+### 6. Thử các kích thước mẫu `--sample` khác nhau
+
+```powershell
+foreach ($n in 50, 100, 200, 0) {   # 0 = lấy hết move của toán tử được chọn
+    .\solver.exe data\50.10.1.json --mode=seq --sample=$n --time=3000 --iter=1000000000
+}
+```
+
+## Các chế độ sinh lân cận (`--mode`)
+
+Ở cả 3 chế độ, tập khách/trip được xét vẫn chọn bằng `SELECT_SEARCH_COMPONENTS`. Các bước sau đó
+cũng giữ nguyên: lọc tabu + aspiration, chọn move tốt nhất, Strategic Oscillation và Ruin & Recreate.
+3 chế độ chỉ khác nhau ở bước sinh candidate pool (`candidate_pool.hpp`):
+
+| Chế độ | Mỗi vòng lặp |
+|---|---|
+| `all` | Chạy **cả 6 toán tử** (Relocate, Or-opt(2), Swap, 2-opt, Cross-trip, Trip-relocate), đánh giá toàn bộ move sinh ra (phiên bản gốc). |
+| `random` | Chọn **ngẫu nhiên 1 toán tử**, sinh move của toán tử đó rồi lấy mẫu ngẫu nhiên tối đa `--sample` move để đánh giá. |
+| `seq` | Chọn toán tử **tuần tự xoay vòng** theo số vòng lặp: Relocate → Or-opt(2) → Swap → 2-opt → Cross-trip → Trip-relocate → Relocate…, rồi lấy mẫu ngẫu nhiên tối đa `--sample` move như `random`. |
+
+- `random` và `seq` dùng chung cách lấy mẫu, chỉ khác cách chọn toán tử, nên so sánh được trực tiếp với nhau.
+- Nếu toán tử được chọn không sinh được candidate hợp lệ nào, solver chuyển sang toán tử khác
+  ngay trong vòng đó: ngẫu nhiên với `random`, toán tử kế tiếp với `seq`.
+
+### So sánh 3 chế độ: `run_compare.bat`
+
+Nhấp đúp `run_compare.bat`, hoặc gõ `run_compare.bat` trong terminal. Script sẽ build `solver.exe`
+rồi lần lượt chạy `all`, `random`, `seq` trên toàn bộ `data/`, mỗi chế độ ra 1 file
+`report/report_<tag>_...txt`. Các tham số chỉnh ở đầu file:
+
+```bat
+set TIME_LIMIT=30
+set ITER=1000000000
+set sample=1000
+set SEED=42
+```
+
+- `TIME_LIMIT`: số giây cho mỗi instance, dùng chung cho cả 3 chế độ.
+- `ITER`: đặt rất lớn để solver dừng theo thời gian.
+- `SAMPLE`, `SEED`: giống `--sample`, `--seed`.
+
+Lưu ý khi đánh giá kết quả:
+- **So sánh theo cùng thời gian, không theo cùng số vòng lặp.** Mỗi vòng của `all` đánh giá nhiều move hơn hẳn,
+  nên cùng số vòng thì `all` sẽ tốn thời gian gấp nhiều lần. Vì vậy script dùng `--time` chung và `--iter` rất lớn.
+- `random`/`seq` có thể dừng trước `TIME_LIMIT` vì điều kiện dừng: 5000 vòng liên tiếp không cải thiện
+  (`stoppingStagnation` trong `main.cpp`).
+- Kết quả phụ thuộc seed. Nên chạy vài seed (ví dụ `--seed=1` … `--seed=5`) rồi lấy trung bình / tốt nhất.
+- Có thể thử thêm vài giá trị `--sample` (50, 100, 200) để xem ảnh hưởng của kích thước mẫu.
 
 ## Lưu ý quan trọng về instance mẫu `6_5_1.json`
 

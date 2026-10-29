@@ -1,0 +1,82 @@
+======================================================================================================================================================
+BAO CAO TONG HOP KET QUA ADAPTIVE TABU SEARCH (MVRPD-TW)
+Che do sinh lan can: seq | sample=1000 | seed=42 | iter=1000000000 | time=3000s
+Bat dau chay : 29/10/2026 11:08
+Hoan thanh   : 29/10/2026 11:08
+So file test : 1 | Co loi giai hop le: 1 | Khong co loi giai hop le: 0 | Loi khi chay: 0
+Tong thoi gian chay: 6.21s
+======================================================================================================================================================
+
+BANG TONG HOP
+  - Hop le tot nhat   : makespan cua loi giai tot nhat hop le ('-' neu khong tim duoc)
+  - Tot nhat tim duoc : makespan nho nhat trong cac loi giai da duyet (co the vi pham);
+                        cac cot vi pham (Tong VP, Q, D, TW, W, Chua PV) la cua loi giai nay
+
+File          n   T   D   Time(s)   Iter  Hop le tot nhat  Tot nhat tim duoc     Tong VP          Q          D         TW          W  Chua PV
+------------------------------------------------------------------------------------------------------------------------------------------------------
+50.10.1      50   3   3      6.21   7709        1893.3764          1893.3764      0.0000     0.0000     0.0000     0.0000     0.0000        0
+
+
+CHI TIET LOI GIAI TUNG FILE
+
+======================================================================================================================================================
+File: data\50.10.1.json | Instance: 50.10.1
+Khach hang=50 | Truck=3 | Drone=3
+Thoi gian chay: 6.21s | Iterations: 7709 | Hoan thanh luc: 29/10/2026 11:08
+------------------------------------------------------------------------------------------------------------------------------------------------------
+[LOI GIAI TOT NHAT HOP LE]
+Makespan: 1893.3764
+Total distance: 257629.9832
+Tong vi pham: 0.0000 | Q (tai trong)=0.0000 | D (tam bay drone)=0.0000 | TW (khung thoi gian)=0.0000 | W (thoi gian cho)=0.0000 | Khach chua phuc vu=0
+Feasible: YES
+Vehicle 0 [TRUCK] completion=1893.3764
+  Trip 0 (uid=1000013): 0 -> 45 -> 19 -> 49 -> 0 | start=0.0000 return=1893.3764 load=40.5232 dist=29624.5249
+Vehicle 1 [TRUCK] completion=1848.4942
+  Trip 0 (uid=1000077): 0 -> 9 -> 27 -> 42 -> 24 -> 15 -> 21 -> 3 -> 10 -> 0 | start=0.0000 return=1848.4942 load=60.3156 dist=28922.2791
+Vehicle 2 [TRUCK] completion=1838.0195
+  Trip 0 (uid=1000105): 0 -> 40 -> 34 -> 7 -> 33 -> 6 -> 18 -> 11 -> 20 -> 16 -> 0 | start=0.0000 return=1838.0195 load=95.3151 dist=28758.3881
+Vehicle 3 [DRONE] completion=1809.2955
+  Trip 0 (uid=1146640): 0 -> 12 -> 28 -> 35 -> 22 -> 30 -> 0 | start=0.0000 return=586.4924 load=2.2346 dist=18352.9885
+  Trip 1 (uid=1177401): 0 -> 1 -> 8 -> 46 -> 0 | start=586.4924 return=1202.7889 load=2.2195 dist=19285.6435
+  Trip 2 (uid=1181358): 0 -> 48 -> 17 -> 4 -> 0 | start=1202.7889 return=1809.2955 load=1.8781 dist=18979.2904
+Vehicle 4 [DRONE] completion=1746.2328
+  Trip 0 (uid=1121190): 0 -> 50 -> 47 -> 14 -> 0 | start=0.0000 return=628.3517 load=2.1042 dist=19662.8853
+  Trip 1 (uid=1168973): 0 -> 29 -> 26 -> 39 -> 0 | start=628.3517 return=1286.0177 load=1.8374 dist=20580.2088
+  Trip 2 (uid=1147514): 0 -> 38 -> 43 -> 2 -> 0 | start=1286.0177 return=1746.2328 load=1.8733 dist=14401.4203
+Vehicle 5 [DRONE] completion=1887.4103
+  Trip 0 (uid=1179007): 0 -> 5 -> 44 -> 23 -> 32 -> 0 | start=0.0000 return=444.1309 load=2.1018 dist=13898.0990
+  Trip 1 (uid=1182037): 0 -> 25 -> 13 -> 0 | start=444.1309 return=1052.4552 load=2.2085 dist=19036.1724
+  Trip 2 (uid=1168544): 0 -> 36 -> 37 -> 31 -> 0 | start=1052.4552 return=1751.4724 load=1.6503 dist=21874.2044
+  Trip 3 (uid=1181494): 0 -> 41 -> 0 | start=1751.4724 return=1887.4103 load=0.8363 dist=4253.8785
+=== VALIDATOR (doc lap) ===
+Ket qua: HOP LE | makespan=1893.3764 | distance=257629.9832
+
+[LOI GIAI TOT NHAT TIM DUOC (co the khong hop le)]
+Makespan: 1893.3764
+Total distance: 257629.9832
+Tong vi pham: 0.0000 | Q (tai trong)=0.0000 | D (tam bay drone)=0.0000 | TW (khung thoi gian)=0.0000 | W (thoi gian cho)=0.0000 | Khach chua phuc vu=0
+Feasible: YES
+Vehicle 0 [TRUCK] completion=1893.3764
+  Trip 0 (uid=1000013): 0 -> 45 -> 19 -> 49 -> 0 | start=0.0000 return=1893.3764 load=40.5232 dist=29624.5249
+Vehicle 1 [TRUCK] completion=1848.4942
+  Trip 0 (uid=1000077): 0 -> 9 -> 27 -> 42 -> 24 -> 15 -> 21 -> 3 -> 10 -> 0 | start=0.0000 return=1848.4942 load=60.3156 dist=28922.2791
+Vehicle 2 [TRUCK] completion=1838.0195
+  Trip 0 (uid=1000105): 0 -> 40 -> 34 -> 7 -> 33 -> 6 -> 18 -> 11 -> 20 -> 16 -> 0 | start=0.0000 return=1838.0195 load=95.3151 dist=28758.3881
+Vehicle 3 [DRONE] completion=1809.2955
+  Trip 0 (uid=1146640): 0 -> 12 -> 28 -> 35 -> 22 -> 30 -> 0 | start=0.0000 return=586.4924 load=2.2346 dist=18352.9885
+  Trip 1 (uid=1177401): 0 -> 1 -> 8 -> 46 -> 0 | start=586.4924 return=1202.7889 load=2.2195 dist=19285.6435
+  Trip 2 (uid=1181358): 0 -> 48 -> 17 -> 4 -> 0 | start=1202.7889 return=1809.2955 load=1.8781 dist=18979.2904
+Vehicle 4 [DRONE] completion=1746.2328
+  Trip 0 (uid=1121190): 0 -> 50 -> 47 -> 14 -> 0 | start=0.0000 return=628.3517 load=2.1042 dist=19662.8853
+  Trip 1 (uid=1168973): 0 -> 29 -> 26 -> 39 -> 0 | start=628.3517 return=1286.0177 load=1.8374 dist=20580.2088
+  Trip 2 (uid=1147514): 0 -> 38 -> 43 -> 2 -> 0 | start=1286.0177 return=1746.2328 load=1.8733 dist=14401.4203
+Vehicle 5 [DRONE] completion=1887.4103
+  Trip 0 (uid=1179007): 0 -> 5 -> 44 -> 23 -> 32 -> 0 | start=0.0000 return=444.1309 load=2.1018 dist=13898.0990
+  Trip 1 (uid=1182037): 0 -> 25 -> 13 -> 0 | start=444.1309 return=1052.4552 load=2.2085 dist=19036.1724
+  Trip 2 (uid=1168544): 0 -> 36 -> 37 -> 31 -> 0 | start=1052.4552 return=1751.4724 load=1.6503 dist=21874.2044
+  Trip 3 (uid=1181494): 0 -> 41 -> 0 | start=1751.4724 return=1887.4103 load=0.8363 dist=4253.8785
+=== VALIDATOR (doc lap) ===
+Ket qua: HOP LE | makespan=1893.3764 | distance=257629.9832
+
+======================================================================================================================================================
+Hoan thanh luc: 29/10/2026 11:08

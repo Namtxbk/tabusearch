@@ -48,6 +48,7 @@ struct TabuSearchParams {
     int ruinMaxAttempts = 5;
     double maxAllowedInfeasibility = 5.0; // ngưỡng chặn candidate quá tệ (an toàn thực thi)
     unsigned int randomSeed = 42;
+    NeighborhoodConfig neighborhood;      // chế độ sinh lân cận: all / random / seq
 };
 
 struct TabuSearchResult {
@@ -61,6 +62,7 @@ struct TabuSearchResult {
     Solution bestFeasible;   // lời giải hợp lệ tốt nhất (makespan nhỏ nhất)
     bool hasBestAny = false;
     Solution bestAny;        // lời giải makespan nhỏ nhất đã duyệt (phục vụ đủ khách), có thể vi phạm
+    long long operatorUsage[NUM_OPERATORS] = {0}; // số vòng lặp mỗi toán tử sinh pool (chế độ random/seq)
 };
 
 // Theo dõi lời giải có makespan nhỏ nhất trong mọi lời giải đã duyệt (kể cả không khả thi).
@@ -112,6 +114,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     long long iteration = 0;
     long long hDiv = 0;
     long long hStop = 0;
+    long long operatorUsage[NUM_OPERATORS] = {0};
 
     auto elapsedSeconds = [&]() {
         return std::chrono::duration<double>(clock::now() - startTime).count();
@@ -148,8 +151,11 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
         }
 
         // 18. candidatePool
+        int usedOperator = -1;
         std::vector<Candidate> candidatePool = buildCandidatePool(
-            inst, current, bestFeasible.get(), lambda, H, rng, params.maxAllowedInfeasibility);
+            inst, current, bestFeasible.get(), lambda, H, rng, params.maxAllowedInfeasibility,
+            params.neighborhood, iteration, &usedOperator);
+        if (usedOperator >= 0) ++operatorUsage[usedOperator];
 
         // 19-23. admissiblePool
         std::vector<const Candidate*> admissiblePool;
@@ -219,6 +225,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     TabuSearchResult result;
     result.iterations = iteration;
     result.elapsedSeconds = elapsedSeconds();
+    for (int op = 0; op < NUM_OPERATORS; ++op) result.operatorUsage[op] = operatorUsage[op];
     if (bestFeasible != nullptr) { result.hasBestFeasible = true; result.bestFeasible = *bestFeasible; }
     if (bestAny != nullptr) { result.hasBestAny = true; result.bestAny = *bestAny; }
 

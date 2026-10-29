@@ -3,6 +3,16 @@
 //   solver.exe                 -> chạy TẤT CẢ file *.json trong thư mục data/
 //   solver.exe <file.json>     -> chỉ chạy 1 file
 //   solver.exe <file.json> <max_wait>
+// Tuỳ chọn (đặt ở bất kỳ vị trí nào):
+//   --mode=all|random|seq   cách sinh lân cận (mặc định all = cả 6 toán tử mỗi vòng)
+//                           random: chọn ngẫu nhiên 1 toán tử / vòng, lấy mẫu ngẫu nhiên move của nó
+//                           seq   : xoay vòng tuần tự 6 toán tử, lấy mẫu ngẫu nhiên move của nó
+//   --sample=N              số move tối đa lấy mẫu từ toán tử được chọn (random/seq, mặc định 100, 0 = lấy hết)
+//   --seed=N                seed ngẫu nhiên (mặc định 42)
+//   --iter=N                số vòng lặp tối đa (mặc định 2000)
+//   --time=S                giới hạn thời gian mỗi instance, giây (mặc định không giới hạn)
+//                           -> so sánh công bằng giữa các mode: dùng cùng --time và --iter lớn
+//   vd: solver.exe --mode=random --sample=100
 // Mỗi instance ghi chi tiết (kèm debug log) vào record/<ten>_<YYYY-MM-DD_HH-MM>.txt,
 // tổng hợp lời giải của tất cả instance ghi vào 1 file duy nhất report/report_<YYYY-MM-DD_HH-MM>.txt.
 #include <iostream>
@@ -23,6 +33,15 @@ namespace fs = std::filesystem;
 static const char* DATA_DIR = "data";
 static const char* RECORD_DIR = "record";
 static const char* REPORT_DIR = "report";
+
+// Cấu hình chạy lấy từ dòng lệnh.
+struct RunConfig {
+    double maxWaitOverride = -1.0;
+    NeighborhoodConfig neighborhood;
+    unsigned int seed = 42;
+    long long maxIterations = 2000;
+    double timeLimitSeconds = 200000.0;
+};
 
 static const char* vehicleTypeName(VehicleType t) {
     return (t == VehicleType::TRUCK) ? "TRUCK" : "DRONE";
@@ -90,6 +109,7 @@ struct RunSummary {
     std::string errorMsg;
     long long iterations = 0;
     double seconds = 0.0;
+    long long operatorUsage[NUM_OPERATORS] = {0};
     std::string finishedAt;
     ReportedSolution bestFeasible;  // lời giải tốt nhất hợp lệ
     ReportedSolution bestAny;       // lời giải tốt nhất tìm được (có thể không hợp lệ)
@@ -105,7 +125,8 @@ static void printReported(const char* title, const ReportedSolution& r, std::ost
     printValidationReport(r.validation, os);
 }
 
-static RunSummary runInstance(const std::string& path, double maxWaitOverride, std::ostream& os) {
+static RunSummary runInstance(const std::string& path, const RunConfig& cfg, std::ostream& os) {
+    const double maxWaitOverride = cfg.maxWaitOverride;
     RunSummary sum;
     sum.path = path;
     try {
@@ -127,13 +148,17 @@ static RunSummary runInstance(const std::string& path, double maxWaitOverride, s
            << " | drones=" << inst.num_drones << "\n\n";
 
         TabuSearchParams params;
-        params.maxIterations = 2000;
-        params.timeLimitSeconds = 200000.0;
+        params.maxIterations = cfg.maxIterations;
+        params.timeLimitSeconds = cfg.timeLimitSeconds;
         params.stoppingStagnation = 5000;
         // 360 quá cao so với tổng số iteration khả dụng trong ngân sách thời gian (n lớn chỉ chạy
         // được ~100-400 iteration/20s) -> ruin-recreate gần như không bao giờ được kích hoạt.
         // Hạ xuống để search có cơ hội thoát local optimum trong cùng ngân sách thời gian.
         params.diversificationStagnation = 30;
+        params.neighborhood = cfg.neighborhood;
+        params.randomSeed = cfg.seed;
+        os << "Neighborhood mode = " << neighborhoodModeName(cfg.neighborhood.mode)
+           << " | sample = " << cfg.neighborhood.sampleSize << " | seed = " << cfg.seed << "\n\n";
 
         // adaptiveTabuSearch in debug log ra std::cout -> chuyển hướng sang file record.
         std::streambuf* oldBuf = std::cout.rdbuf(os.rdbuf());
@@ -148,6 +173,7 @@ static RunSummary runInstance(const std::string& path, double maxWaitOverride, s
 
         sum.iterations = result.iterations;
         sum.seconds = result.elapsedSeconds;
+        for (int op = 0; op < NUM_OPERATORS; ++op) sum.operatorUsage[op] = result.operatorUsage[op];
         if (result.hasBestFeasible) {
             sum.bestFeasible = {true, result.bestFeasible, validateSolution(inst, result.bestFeasible)};
         }
@@ -158,7 +184,13 @@ static RunSummary runInstance(const std::string& path, double maxWaitOverride, s
 
         os << "\nIterations: " << result.iterations
            << " | Time: " << result.elapsedSeconds << "s"
-           << " | Feasible found: " << (result.foundFeasible ? "YES" : "NO") << "\n\n";
+           << " | Feasible found: " << (result.foundFeasible ? "YES" : "NO") << "\n";
+        if (cfg.neighborhood.mode != NeighborhoodMode::ALL) {
+            os << "Operator usage:";
+            for (int op = 0; op < NUM_OPERATORS; ++op) os << " " << operatorName(op) << "=" << sum.operatorUsage[op];
+            os << "\n";
+        }
+        os << "\n";
         printReported("LOI GIAI TOT NHAT HOP LE", sum.bestFeasible, os);
         os << "\n";
         printReported("LOI GIAI TOT NHAT TIM DUOC (co the khong hop le)", sum.bestAny, os);
@@ -199,7 +231,7 @@ static bool ensureDir(const char* dir) {
 
 // Ghi file báo cáo tổng hợp duy nhất: bảng tóm tắt + chi tiết lời giải từng file.
 static void writeReport(const std::string& reportPath, const std::vector<RunSummary>& runs,
-                        const std::string& startedAt, const std::string& finishedAt) {
+                        const std::string& startedAt, const std::string& finishedAt, const RunConfig& cfg) {
     std::ofstream os(reportPath);
     const std::string line(150, '=');
     const std::string dash(150, '-');
@@ -214,6 +246,9 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
 
     os << line << "\n";
     os << "BAO CAO TONG HOP KET QUA ADAPTIVE TABU SEARCH (MVRPD-TW)\n";
+    os << "Che do sinh lan can: " << neighborhoodModeName(cfg.neighborhood.mode)
+       << " | sample=" << cfg.neighborhood.sampleSize << " | seed=" << cfg.seed
+       << " | iter=" << cfg.maxIterations << " | time=" << cfg.timeLimitSeconds << "s\n";
     os << "Bat dau chay : " << startedAt << "\n";
     os << "Hoan thanh   : " << finishedAt << "\n";
     os << "So file test : " << runs.size()
@@ -280,11 +315,38 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
 }
 
 int main(int argc, char** argv) {
-    double maxWaitOverride = (argc > 2) ? std::stod(argv[2]) : -1.0;
+    RunConfig cfg;
+    std::vector<std::string> positional;
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a.rfind("--mode=", 0) == 0) {
+            std::string m = a.substr(7);
+            if (m == "all") cfg.neighborhood.mode = NeighborhoodMode::ALL;
+            else if (m == "random") cfg.neighborhood.mode = NeighborhoodMode::RANDOM_OP;
+            else if (m == "seq") cfg.neighborhood.mode = NeighborhoodMode::SEQUENTIAL;
+            else { std::cerr << "Error: --mode phai la all|random|seq\n"; return 1; }
+        } else if (a.rfind("--sample=", 0) == 0) {
+            cfg.neighborhood.sampleSize = std::stoi(a.substr(9));
+        } else if (a.rfind("--seed=", 0) == 0) {
+            cfg.seed = static_cast<unsigned int>(std::stoul(a.substr(7)));
+        } else if (a.rfind("--iter=", 0) == 0) {
+            cfg.maxIterations = std::stoll(a.substr(7));
+        } else if (a.rfind("--time=", 0) == 0) {
+            cfg.timeLimitSeconds = std::stod(a.substr(7));
+        } else {
+            positional.push_back(a);
+        }
+    }
+    if (positional.size() > 1) cfg.maxWaitOverride = std::stod(positional[1]);
+    // Tên file kèm mode/sample/seed để các lần chạy nhiều seed trong cùng 1 phút không ghi đè nhau.
+    std::string modeTag = neighborhoodModeName(cfg.neighborhood.mode);
+    if (cfg.neighborhood.mode != NeighborhoodMode::ALL)
+        modeTag += "_sample" + std::to_string(cfg.neighborhood.sampleSize);
+    modeTag += "_seed" + std::to_string(cfg.seed);
 
     std::vector<std::string> files;
-    if (argc > 1) {
-        files.push_back(argv[1]);
+    if (!positional.empty()) {
+        files.push_back(positional[0]);
     } else {
         if (!fs::is_directory(DATA_DIR)) {
             std::cerr << "Error: khong tim thay thu muc '" << DATA_DIR << "'.\n";
@@ -311,11 +373,11 @@ int main(int argc, char** argv) {
         std::cerr << "[" << (i + 1) << "/" << files.size() << "] " << path << " ... " << std::flush;
 
         std::ostringstream buf;
-        RunSummary sum = runInstance(path, maxWaitOverride, buf);
+        RunSummary sum = runInstance(path, cfg, buf);
         if (sum.name.empty()) sum.name = fs::path(path).stem().string();
 
         std::string recordPath = (fs::path(RECORD_DIR) /
-            (sum.name + "_" + nowString(true) + ".txt")).string();
+            (sum.name + "_" + modeTag + "_" + nowString(true) + ".txt")).string();
         std::ofstream rec(recordPath);
         rec << buf.str();
 
@@ -333,8 +395,8 @@ int main(int argc, char** argv) {
     }
 
     std::string finished = nowString(false);
-    std::string reportPath = (fs::path(REPORT_DIR) / ("report_" + nowString(true) + ".txt")).string();
-    writeReport(reportPath, summaries, startedAt, finished);
+    std::string reportPath = (fs::path(REPORT_DIR) / ("report_" + modeTag + "_" + nowString(true) + ".txt")).string();
+    writeReport(reportPath, summaries, startedAt, finished, cfg);
 
     int nError = 0;
     for (const auto& r : summaries) nError += !r.ok;
