@@ -183,7 +183,12 @@ Lưu ý khi đánh giá kết quả:
 - **So sánh theo cùng thời gian, không theo cùng số vòng lặp.** Mỗi vòng của `all` đánh giá nhiều move hơn hẳn,
   nên cùng số vòng thì `all` sẽ tốn thời gian gấp nhiều lần. Vì vậy script dùng `--time` chung và `--iter` rất lớn.
 - `random`/`seq` có thể dừng trước `TIME_LIMIT` vì điều kiện dừng: 5000 vòng liên tiếp không cải thiện
-  (`stoppingStagnation` trong `main.cpp`).
+  (`stoppingStagnation` trong `main.cpp`). Điều kiện này **chỉ áp dụng khi đã tìm được nghiệm hợp lệ**.
+  Khi chưa có nghiệm hợp lệ, solver chạy tiếp đến khi hết `--time` hoặc `--iter`, nên instance khó
+  có thể chạy hết toàn bộ `TIME_LIMIT`.
+- `result.csv` (benchmark) là lời giải của bài toán **không có khung thời gian**: thời gian xe chỉ tính
+  quãng đường / vận tốc, không xét [open, close]. Vì vậy makespan của solver (có TW) bằng hoặc lớn hơn
+  benchmark là bình thường; benchmark chỉ dùng làm mốc tham khảo.
 - Kết quả phụ thuộc seed. Nên chạy vài seed (ví dụ `--seed=1` … `--seed=5`) rồi lấy trung bình / tốt nhất.
 - Có thể thử thêm vài giá trị `--sample` (50, 100, 200) để xem ảnh hưởng của kích thước mẫu.
 

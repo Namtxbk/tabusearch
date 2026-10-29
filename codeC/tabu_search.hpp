@@ -121,9 +121,12 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     };
 
     // 9. Vòng lặp chính
+    // Điều kiện dừng theo stagnation (H_stop) CHỈ áp dụng khi đã có nghiệm khả thi. Nếu chưa có,
+    // search tiếp tục đến khi hết thời gian / hết vòng lặp — tránh trường hợp bị kẹt ở 1 nghiệm gần
+    // khả thi rồi dừng sớm mà chưa dùng hết ngân sách (vd 50.10.4, seed 42 dừng ở 15s / 3000s).
     while (iteration < params.maxIterations &&
            elapsedSeconds() < params.timeLimitSeconds &&
-           hStop < params.stoppingStagnation) {
+           (bestFeasible == nullptr || hStop < params.stoppingStagnation)) {
 
         ++iteration; // 10
 
