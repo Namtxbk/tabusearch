@@ -4,10 +4,14 @@
 //   solver.exe <file.json>     -> chỉ chạy 1 file
 //   solver.exe <file.json> <max_wait>
 // Tuỳ chọn (đặt ở bất kỳ vị trí nào):
-//   --mode=all|random|seq   cách sinh lân cận (mặc định all = cả 6 toán tử mỗi vòng)
-//                           random: chọn ngẫu nhiên 1 toán tử / vòng, lấy mẫu ngẫu nhiên move của nó
-//                           seq   : xoay vòng tuần tự 6 toán tử, lấy mẫu ngẫu nhiên move của nó
-//   --sample=N              số move tối đa lấy mẫu từ toán tử được chọn (random/seq, mặc định 100, 0 = lấy hết)
+//   --mode=all|random|seq|adaptive   cách sinh lân cận (mặc định all = cả 6 toán tử mỗi vòng)
+//                           random  : chọn ngẫu nhiên 1 toán tử / vòng, lấy mẫu ngẫu nhiên move của nó
+//                           seq     : xoay vòng tuần tự 6 toán tử, lấy mẫu ngẫu nhiên move của nó
+//                           adaptive: chọn toán tử theo trọng số (roulette), trọng số tự cập nhật (operator_weights.hpp)
+//   --sample=N              số move tối đa lấy mẫu từ toán tử được chọn (random/seq/adaptive, mặc định 100, 0 = lấy hết)
+//   --aos-seg=N             adaptive: số vòng lặp mỗi đoạn trước khi cập nhật trọng số (mặc định 100)
+//   --aos-r=R               adaptive: hệ số phản ứng r trong [0,1] (mặc định 0.1)
+//   --aos-scores=a,b,c      adaptive: điểm thưởng nghiệm tốt nhất mới / cải thiện nghiệm hiện tại / chỉ được chấp nhận (mặc định 33,9,1)
 //   --seed=N                seed ngẫu nhiên (mặc định 42)
 //   --iter=N                số vòng lặp tối đa (mặc định 2000)
 //   --time=S                giới hạn thời gian mỗi instance, giây (mặc định không giới hạn)
@@ -23,6 +27,7 @@
 #include <vector>
 #include <algorithm>
 #include <ctime>
+#include <chrono>
 #include <filesystem>
 #include "instance.hpp"
 #include "tabu_search.hpp"
@@ -110,6 +115,10 @@ struct RunSummary {
     long long iterations = 0;
     double seconds = 0.0;
     long long operatorUsage[NUM_OPERATORS] = {0};
+    double timeFirstFeasible = -1.0;   // giây: lúc có nghiệm hợp lệ đầu tiên (-1 = không có)
+    double timeBestFeasible = -1.0;    // giây: lúc tìm ra nghiệm hợp lệ tốt nhất = thời gian ra kết quả
+    long long iterBestFeasible = -1;
+    std::string aosSummary;            // trọng số toán tử cuối cùng (chế độ adaptive)
     std::string finishedAt;
     ReportedSolution bestFeasible;  // lời giải tốt nhất hợp lệ
     ReportedSolution bestAny;       // lời giải tốt nhất tìm được (có thể không hợp lệ)
@@ -174,6 +183,9 @@ static RunSummary runInstance(const std::string& path, const RunConfig& cfg, std
         sum.iterations = result.iterations;
         sum.seconds = result.elapsedSeconds;
         for (int op = 0; op < NUM_OPERATORS; ++op) sum.operatorUsage[op] = result.operatorUsage[op];
+        sum.timeFirstFeasible = result.timeFirstFeasible;
+        sum.timeBestFeasible = result.timeBestFeasible;
+        sum.iterBestFeasible = result.iterBestFeasible;
         if (result.hasBestFeasible) {
             sum.bestFeasible = {true, result.bestFeasible, validateSolution(inst, result.bestFeasible)};
         }
@@ -185,10 +197,21 @@ static RunSummary runInstance(const std::string& path, const RunConfig& cfg, std
         os << "\nIterations: " << result.iterations
            << " | Time: " << result.elapsedSeconds << "s"
            << " | Feasible found: " << (result.foundFeasible ? "YES" : "NO") << "\n";
+        if (result.foundFeasible) {
+            os << "Thoi gian ra loi giai hop le dau tien: " << result.timeFirstFeasible << "s"
+               << " | Thoi gian ra ket qua (loi giai hop le tot nhat): " << result.timeBestFeasible << "s"
+               << " (iteration " << result.iterBestFeasible << ")\n";
+        }
         if (cfg.neighborhood.mode != NeighborhoodMode::ALL) {
             os << "Operator usage:";
             for (int op = 0; op < NUM_OPERATORS; ++op) os << " " << operatorName(op) << "=" << sum.operatorUsage[op];
             os << "\n";
+        }
+        if (cfg.neighborhood.mode == NeighborhoodMode::ADAPTIVE) {
+            std::ostringstream w;
+            result.operatorWeights.print(w, operatorNames());
+            sum.aosSummary = w.str();
+            os << sum.aosSummary;
         }
         os << "\n";
         printReported("LOI GIAI TOT NHAT HOP LE", sum.bestFeasible, os);
@@ -231,10 +254,11 @@ static bool ensureDir(const char* dir) {
 
 // Ghi file báo cáo tổng hợp duy nhất: bảng tóm tắt + chi tiết lời giải từng file.
 static void writeReport(const std::string& reportPath, const std::vector<RunSummary>& runs,
-                        const std::string& startedAt, const std::string& finishedAt, const RunConfig& cfg) {
+                        const std::string& startedAt, const std::string& finishedAt, const RunConfig& cfg,
+                        double wallSeconds) {
     std::ofstream os(reportPath);
-    const std::string line(150, '=');
-    const std::string dash(150, '-');
+    const std::string line(182, '=');
+    const std::string dash(182, '-');
 
     int nFeasible = 0, nError = 0;
     double totalTime = 0.0;
@@ -249,6 +273,11 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
     os << "Che do sinh lan can: " << neighborhoodModeName(cfg.neighborhood.mode)
        << " | sample=" << cfg.neighborhood.sampleSize << " | seed=" << cfg.seed
        << " | iter=" << cfg.maxIterations << " | time=" << cfg.timeLimitSeconds << "s\n";
+    if (cfg.neighborhood.mode == NeighborhoodMode::ADAPTIVE) {
+        const auto& a = cfg.neighborhood.aos;
+        os << "Tham so AOS: seg=" << a.segmentLength << " | r=" << a.reaction
+           << " | scores=" << a.sigmaNewBest << "," << a.sigmaImproved << "," << a.sigmaAccepted << "\n";
+    }
     os << "Bat dau chay : " << startedAt << "\n";
     os << "Hoan thanh   : " << finishedAt << "\n";
     os << "So file test : " << runs.size()
@@ -258,14 +287,53 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
     os << std::fixed << std::setprecision(2) << "Tong thoi gian chay: " << totalTime << "s\n";
     os << line << "\n\n";
 
+    // ---- Thống kê thời gian ----
+    // Time      : thời gian chạy thuật toán của instance (đến khi dừng).
+    // T_first   : lúc có lời giải hợp lệ đầu tiên.
+    // T_best    : lúc tìm ra lời giải hợp lệ tốt nhất (= thời gian ra kết quả cuối cùng).
+    struct Stat {
+        int count = 0; double sum = 0.0, mn = 0.0, mx = 0.0; std::string mnName, mxName;
+        void add(double v, const std::string& name) {
+            if (count == 0 || v < mn) { mn = v; mnName = name; }
+            if (count == 0 || v > mx) { mx = v; mxName = name; }
+            sum += v; ++count;
+        }
+        void print(std::ostream& o, const char* label) const {
+            o << "  " << std::left << std::setw(42) << label << std::right;
+            if (count == 0) { o << "(khong co)\n"; return; }
+            o << "Tong=" << std::setw(10) << sum << "s | TB=" << std::setw(9) << sum / count
+              << "s | Min=" << std::setw(9) << mn << "s (" << mnName << ")"
+              << " | Max=" << std::setw(9) << mx << "s (" << mxName << ") | so instance=" << count << "\n";
+        }
+    };
+    Stat stRun, stFirst, stBest;
+    for (const auto& r : runs) {
+        if (!r.ok) continue;
+        stRun.add(r.seconds, r.name);
+        if (r.bestFeasible.has) {
+            stFirst.add(r.timeFirstFeasible, r.name);
+            stBest.add(r.timeBestFeasible, r.name);
+        }
+    }
+    os << "THONG KE THOI GIAN" << std::setprecision(2) << "\n";
+    stRun.print(os, "Thoi gian chay (Time, moi instance):");
+    stFirst.print(os, "Ra loi giai hop le dau tien (T_first):");
+    stBest.print(os, "Ra ket qua - hop le tot nhat (T_best):");
+    os << "  " << std::left << std::setw(42) << "Thoi gian thuc te ca lan chay:" << std::right
+       << wallSeconds << "s (wall-clock, gom ca doc du lieu, ghi record)\n";
+    os << "  Ghi chu: T_first/T_best chi tinh tren cac instance co loi giai hop le.\n";
+    os << line << "\n\n";
+
     // ---- Bảng tóm tắt ----
     os << "BANG TONG HOP\n";
     os << "  - Hop le tot nhat   : makespan cua loi giai tot nhat hop le ('-' neu khong tim duoc)\n";
     os << "  - Tot nhat tim duoc : makespan nho nhat trong cac loi giai da duyet (co the vi pham);\n";
-    os << "                        cac cot vi pham (Tong VP, Q, D, TW, W, Chua PV) la cua loi giai nay\n\n";
+    os << "                        cac cot vi pham (Tong VP, Q, D, TW, W, Chua PV) la cua loi giai nay\n";
+    os << "  - T_first / T_best  : giay luc co loi giai hop le dau tien / luc ra loi giai hop le tot nhat ('-' neu khong co)\n\n";
     os << std::left << std::setw(10) << "File" << std::right
        << std::setw(5) << "n" << std::setw(4) << "T" << std::setw(4) << "D"
        << std::setw(10) << "Time(s)" << std::setw(7) << "Iter"
+       << std::setw(11) << "T_first(s)" << std::setw(11) << "T_best(s)" << std::setw(10) << "Iter_best"
        << std::setw(17) << "Hop le tot nhat"
        << std::setw(19) << "Tot nhat tim duoc"
        << std::setw(12) << "Tong VP"
@@ -281,8 +349,13 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
         }
         const Solution& a = r.bestAny.sol;
         os << std::setw(5) << r.customers << std::setw(4) << r.trucks << std::setw(4) << r.drones
-           << std::setprecision(2) << std::setw(10) << r.seconds << std::setw(7) << r.iterations
-           << std::setprecision(4);
+           << std::setprecision(2) << std::setw(10) << r.seconds << std::setw(7) << r.iterations;
+        if (r.bestFeasible.has)
+            os << std::setw(11) << r.timeFirstFeasible << std::setw(11) << r.timeBestFeasible
+               << std::setw(10) << r.iterBestFeasible;
+        else
+            os << std::setw(11) << "-" << std::setw(11) << "-" << std::setw(10) << "-";
+        os << std::setprecision(4);
         if (r.bestFeasible.has) os << std::setw(17) << r.bestFeasible.sol.makespan;
         else os << std::setw(17) << "-";
         os << std::setw(19) << a.makespan
@@ -303,9 +376,14 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
             continue;
         }
         os << "Khach hang=" << r.customers << " | Truck=" << r.trucks << " | Drone=" << r.drones << "\n";
-        os << std::setprecision(2) << "Thoi gian chay: " << r.seconds << "s | Iterations: " << r.iterations
+        os << std::setprecision(2) << "Thoi gian chay: " << r.seconds << "s | Iterations: " << r.iterations;
+        if (r.bestFeasible.has)
+            os << " | T_first=" << r.timeFirstFeasible << "s | T_best=" << r.timeBestFeasible
+               << "s (iter " << r.iterBestFeasible << ")";
+        os
            << " | Hoan thanh luc: " << r.finishedAt << "\n";
         os << dash << "\n";
+        if (!r.aosSummary.empty()) os << r.aosSummary << "\n";
         printReported("LOI GIAI TOT NHAT HOP LE", r.bestFeasible, os);
         os << "\n";
         printReported("LOI GIAI TOT NHAT TIM DUOC (co the khong hop le)", r.bestAny, os);
@@ -324,7 +402,22 @@ int main(int argc, char** argv) {
             if (m == "all") cfg.neighborhood.mode = NeighborhoodMode::ALL;
             else if (m == "random") cfg.neighborhood.mode = NeighborhoodMode::RANDOM_OP;
             else if (m == "seq") cfg.neighborhood.mode = NeighborhoodMode::SEQUENTIAL;
-            else { std::cerr << "Error: --mode phai la all|random|seq\n"; return 1; }
+            else if (m == "adaptive") cfg.neighborhood.mode = NeighborhoodMode::ADAPTIVE;
+            else { std::cerr << "Error: --mode phai la all|random|seq|adaptive\n"; return 1; }
+        } else if (a.rfind("--aos-seg=", 0) == 0) {
+            cfg.neighborhood.aos.segmentLength = std::max(1, std::stoi(a.substr(10)));
+        } else if (a.rfind("--aos-r=", 0) == 0) {
+            cfg.neighborhood.aos.reaction = std::stod(a.substr(8));
+        } else if (a.rfind("--aos-scores=", 0) == 0) {
+            // dạng s1,s2,s3 (new best, improved, accepted)
+            std::stringstream ss(a.substr(13));
+            std::string part;
+            double v[3] = {cfg.neighborhood.aos.sigmaNewBest, cfg.neighborhood.aos.sigmaImproved,
+                           cfg.neighborhood.aos.sigmaAccepted};
+            for (int k = 0; k < 3 && std::getline(ss, part, ','); ++k) v[k] = std::stod(part);
+            cfg.neighborhood.aos.sigmaNewBest = v[0];
+            cfg.neighborhood.aos.sigmaImproved = v[1];
+            cfg.neighborhood.aos.sigmaAccepted = v[2];
         } else if (a.rfind("--sample=", 0) == 0) {
             cfg.neighborhood.sampleSize = std::stoi(a.substr(9));
         } else if (a.rfind("--seed=", 0) == 0) {
@@ -367,6 +460,7 @@ int main(int argc, char** argv) {
     if (!ensureDir(RECORD_DIR) || !ensureDir(REPORT_DIR)) return 1;
 
     std::string startedAt = nowString(false);
+    auto wallStart = std::chrono::steady_clock::now();
     std::vector<RunSummary> summaries;
     for (size_t i = 0; i < files.size(); ++i) {
         const std::string& path = files[i];
@@ -383,7 +477,9 @@ int main(int argc, char** argv) {
 
         if (sum.ok) {
             std::cerr << std::fixed << std::setprecision(4) << "hop le tot nhat=";
-            if (sum.bestFeasible.has) std::cerr << sum.bestFeasible.sol.makespan;
+            if (sum.bestFeasible.has)
+                std::cerr << sum.bestFeasible.sol.makespan << " (T_best=" << std::setprecision(2)
+                          << sum.timeBestFeasible << "s)" << std::setprecision(4);
             else std::cerr << "-";
             std::cerr << " | tot nhat tim duoc=" << sum.bestAny.sol.makespan
                       << " (VP=" << sum.bestAny.sol.totalViolation << ")"
@@ -396,7 +492,8 @@ int main(int argc, char** argv) {
 
     std::string finished = nowString(false);
     std::string reportPath = (fs::path(REPORT_DIR) / ("report_" + modeTag + "_" + nowString(true) + ".txt")).string();
-    writeReport(reportPath, summaries, startedAt, finished, cfg);
+    double wallSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - wallStart).count();
+    writeReport(reportPath, summaries, startedAt, finished, cfg, wallSeconds);
 
     int nError = 0;
     for (const auto& r : summaries) nError += !r.ok;

@@ -62,7 +62,13 @@ struct TabuSearchResult {
     Solution bestFeasible;   // lời giải hợp lệ tốt nhất (makespan nhỏ nhất)
     bool hasBestAny = false;
     Solution bestAny;        // lời giải makespan nhỏ nhất đã duyệt (phục vụ đủ khách), có thể vi phạm
-    long long operatorUsage[NUM_OPERATORS] = {0}; // số vòng lặp mỗi toán tử sinh pool (chế độ random/seq)
+    long long operatorUsage[NUM_OPERATORS] = {0}; // số vòng lặp mỗi toán tử sinh pool (chế độ random/seq/adaptive)
+    OperatorWeights operatorWeights;              // trọng số cuối cùng (chế độ adaptive)
+
+    // Thời điểm ra kết quả (giây, tính từ lúc bắt đầu, gồm cả dựng nghiệm ban đầu); -1 nếu không có.
+    double timeFirstFeasible = -1.0;   // lần đầu có nghiệm khả thi
+    double timeBestFeasible = -1.0;    // lần cuối cải thiện bestFeasible = lúc ra kết quả cuối cùng
+    long long iterBestFeasible = -1;
 };
 
 // Theo dõi lời giải có makespan nhỏ nhất trong mọi lời giải đã duyệt (kể cả không khả thi).
@@ -115,10 +121,26 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     long long hDiv = 0;
     long long hStop = 0;
     long long operatorUsage[NUM_OPERATORS] = {0};
+    OperatorWeights opWeights(params.neighborhood.aos); // chỉ dùng khi mode = ADAPTIVE
+    const bool adaptive = (params.neighborhood.mode == NeighborhoodMode::ADAPTIVE);
 
     auto elapsedSeconds = [&]() {
         return std::chrono::duration<double>(clock::now() - startTime).count();
     };
+
+    // Ghi lại thời điểm bestFeasible được tạo/cải thiện (bestFeasible chỉ đổi con trỏ khi cải thiện).
+    double timeFirstFeasible = -1.0, timeBestFeasible = -1.0;
+    long long iterBestFeasible = -1;
+    const Solution* lastBestFeasiblePtr = nullptr;
+    auto noteFeasibleImproved = [&]() {
+        if (bestFeasible != nullptr && bestFeasible.get() != lastBestFeasiblePtr) {
+            lastBestFeasiblePtr = bestFeasible.get();
+            timeBestFeasible = elapsedSeconds();
+            iterBestFeasible = iteration;
+            if (timeFirstFeasible < 0) timeFirstFeasible = timeBestFeasible;
+        }
+    };
+    noteFeasibleImproved(); // nghiệm ban đầu có thể đã khả thi
 
     // 9. Vòng lặp chính
     // Điều kiện dừng theo stagnation (H_stop) CHỈ áp dụng khi đã có nghiệm khả thi. Nếu chưa có,
@@ -145,6 +167,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
             hDiv = 0;
 
             bool improved = updateBestSolutions(current, bestFeasible, bestInfeasible);
+            noteFeasibleImproved();
             trackBestAny(current, bestAny);
             if (improved) hStop = 0; else hStop += 1;
 
@@ -157,7 +180,7 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
         int usedOperator = -1;
         std::vector<Candidate> candidatePool = buildCandidatePool(
             inst, current, bestFeasible.get(), lambda, H, rng, params.maxAllowedInfeasibility,
-            params.neighborhood, iteration, &usedOperator);
+            params.neighborhood, iteration, &usedOperator, &opWeights);
         if (usedOperator >= 0) ++operatorUsage[usedOperator];
 
         // 19-23. admissiblePool
@@ -204,14 +227,29 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
             continue;
         }
 
+        const double prevViolation = current.totalViolation;
+        const double prevMakespan = current.makespan;
         current = selected->solution;
         registerTabu(*selected, tabuList, iteration, params.baseTabuTenure, rng);
 
         // 31-32. Cập nhật nghiệm tốt nhất
         bool improved = updateBestSolutions(current, bestFeasible, bestInfeasible);
+        noteFeasibleImproved();
         trackBestAny(current, bestAny);
         if (improved) { hDiv = 0; hStop = 0; }
         else { hDiv += 1; hStop += 1; }
+
+        // Adaptive operator selection: thưởng điểm cho toán tử đã sinh ra move vừa thực hiện.
+        if (adaptive && usedOperator >= 0) {
+            OperatorOutcome outcome = OperatorOutcome::ACCEPTED;
+            if (improved) {
+                outcome = OperatorOutcome::NEW_BEST;
+            } else if (current.totalViolation < prevViolation - EPS ||
+                       (std::fabs(current.totalViolation - prevViolation) <= EPS && current.makespan < prevMakespan - EPS)) {
+                outcome = OperatorOutcome::IMPROVED;
+            }
+            opWeights.recordOutcome(usedOperator, outcome);
+        }
 
         // 33-36. Thống kê khả thi từng ràng buộc
         collectFeasibilityStats(current, feasibleCounts);
@@ -229,6 +267,10 @@ inline TabuSearchResult adaptiveTabuSearch(const Instance& inst, const TabuSearc
     result.iterations = iteration;
     result.elapsedSeconds = elapsedSeconds();
     for (int op = 0; op < NUM_OPERATORS; ++op) result.operatorUsage[op] = operatorUsage[op];
+    result.operatorWeights = opWeights;
+    result.timeFirstFeasible = timeFirstFeasible;
+    result.timeBestFeasible = timeBestFeasible;
+    result.iterBestFeasible = iterBestFeasible;
     if (bestFeasible != nullptr) { result.hasBestFeasible = true; result.bestFeasible = *bestFeasible; }
     if (bestAny != nullptr) { result.hasBestAny = true; result.bestAny = *bestAny; }
 

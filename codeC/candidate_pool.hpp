@@ -9,7 +9,9 @@
 //                Relocate -> Or-opt(2) -> Swap -> 2-opt -> Cross-trip -> Trip-relocate -> Relocate ...
 //                rồi lấy mẫu ngẫu nhiên tối đa sampleSize move của toán tử đó (giống RANDOM_OP,
 //                chỉ khác cách chọn toán tử -> so sánh công bằng).
-// Với RANDOM_OP / SEQUENTIAL: nếu toán tử được chọn không sinh được candidate hợp lệ nào thì
+//   ADAPTIVE   : chọn toán tử theo trọng số (roulette wheel), trọng số được cập nhật dần theo hiệu quả
+//                của từng toán tử (operator_weights.hpp); lấy mẫu sampleSize move như RANDOM_OP.
+// Với RANDOM_OP / SEQUENTIAL / ADAPTIVE: nếu toán tử được chọn không sinh được candidate hợp lệ nào thì
 // chuyển sang toán tử khác (ngẫu nhiên / kế tiếp) để vòng lặp không bị lãng phí.
 #pragma once
 
@@ -24,22 +26,28 @@
 #include "operators.hpp"
 #include "evaluate_move.hpp"
 #include "select_components.hpp"
+#include "operator_weights.hpp"
 
-enum class NeighborhoodMode { ALL, RANDOM_OP, SEQUENTIAL };
+enum class NeighborhoodMode { ALL, RANDOM_OP, SEQUENTIAL, ADAPTIVE };
 
 inline const char* neighborhoodModeName(NeighborhoodMode m) {
     switch (m) {
         case NeighborhoodMode::ALL:        return "all";
         case NeighborhoodMode::RANDOM_OP:  return "random";
         case NeighborhoodMode::SEQUENTIAL: return "seq";
+        case NeighborhoodMode::ADAPTIVE:   return "adaptive";
     }
     return "?";
 }
 
 constexpr int NUM_OPERATORS = 6;
-inline const char* operatorName(int op) {
+static_assert(NUM_OPERATORS == AOS_NUM_OPERATORS, "so toan tu phai khop operator_weights.hpp");
+inline const char* const* operatorNames() {
     static const char* names[NUM_OPERATORS] = {"Relocate", "OrOpt2", "Swap", "TwoOpt", "CrossTrip", "TripRelocate"};
-    return (op >= 0 && op < NUM_OPERATORS) ? names[op] : "?";
+    return names;
+}
+inline const char* operatorName(int op) {
+    return (op >= 0 && op < NUM_OPERATORS) ? operatorNames()[op] : "?";
 }
 
 // Sinh move của 1 toán tử (0..5) trên các thành phần đã chọn.
@@ -67,7 +75,8 @@ inline void evaluateMovesInto(const Instance& inst, const Solution& current, con
 
 struct NeighborhoodConfig {
     NeighborhoodMode mode = NeighborhoodMode::ALL;
-    int sampleSize = 100;   // RANDOM_OP / SEQUENTIAL: số move tối đa lấy mẫu từ toán tử được chọn (<=0: lấy hết)
+    int sampleSize = 100;   // RANDOM_OP / SEQUENTIAL / ADAPTIVE: số move tối đa lấy mẫu từ toán tử được chọn (<=0: lấy hết)
+    OperatorWeightParams aos; // tham số cập nhật trọng số (chỉ dùng cho ADAPTIVE)
 };
 
 // FUNCTION BUILD_CANDIDATE_POOL(current, bestFeasible, penaltyWeights lambda, H)
@@ -78,7 +87,8 @@ inline std::vector<Candidate> buildCandidatePool(const Instance& inst, const Sol
                                                   double H, std::mt19937& rng,
                                                   double maxAllowedInfeasibility = std::numeric_limits<double>::infinity(),
                                                   const NeighborhoodConfig& cfg = NeighborhoodConfig(),
-                                                  long long iteration = 0, int* usedOperator = nullptr) {
+                                                  long long iteration = 0, int* usedOperator = nullptr,
+                                                  const OperatorWeights* opWeights = nullptr) {
     std::vector<Candidate> candidatePool;
     if (usedOperator) *usedOperator = -1;
 
@@ -99,6 +109,9 @@ inline std::vector<Candidate> buildCandidatePool(const Instance& inst, const Sol
     if (cfg.mode == NeighborhoodMode::RANDOM_OP) {
         std::iota(order.begin(), order.end(), 0);
         std::shuffle(order.begin(), order.end(), rng);   // order[0] = toán tử chọn ngẫu nhiên
+    } else if (cfg.mode == NeighborhoodMode::ADAPTIVE && opWeights != nullptr) {
+        auto ord = opWeights->selectionOrder(rng);  // order[0] = toán tử chọn theo trọng số
+        std::copy(ord.begin(), ord.end(), order.begin());
     } else { // SEQUENTIAL
         int start = static_cast<int>((iteration > 0 ? iteration - 1 : 0) % NUM_OPERATORS);
         for (int k = 0; k < NUM_OPERATORS; ++k) order[k] = (start + k) % NUM_OPERATORS;
