@@ -1,0 +1,62 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+% ============================================================
+\section{Đặt vấn đề}
+\label{sec:dvd}
+% ============================================================
+
+Logistics chặng cuối (last-mile delivery) là khâu tốn kém và kém hiệu quả nhất trong chuỗi cung ứng, chiếm tới 28\% tổng chi phí vận chuyển hàng hóa~\cite{gevaers2011characteristics}. Trước áp lực từ sự bùng nổ của thương mại điện tử và kỳ vọng ngày càng cao của khách hàng về tốc độ giao hàng, các doanh nghiệp logistics buộc phải tìm kiếm các mô hình vận hành mới hiệu quả hơn.
+
+Drone (máy bay không người lái) nổi lên như một phương tiện giao hàng bổ sung đầy tiềm năng. So với xe tải truyền thống, drone có thể di chuyển theo đường thẳng, không bị ảnh hưởng bởi tắc nghẽn giao thông và tiếp cận nhiều địa điểm khó đến. Tuy nhiên, drone bị giới hạn bởi tải trọng nhỏ, thời gian bay hữu hạn và chỉ phù hợp với một số loại hàng hóa nhất định. Điều này dẫn đến mô hình phối hợp xe tải và drone, trong đó hai loại phương tiện bổ sung cho nhau để tối ưu hóa hiệu quả giao hàng.
+
+Bài toán định tuyến phương tiện với drone và cửa sổ thời gian đa chuyến (Multi-Vehicle Routing Problem with Drones and Time Windows, Multi-Trip --- MVRPD-TW Multi-Trip) là bài toán mô hình hóa hệ thống giao hàng phối hợp nói trên. Bài toán yêu cầu lập lịch phục vụ cho toàn bộ tập khách hàng bằng đội xe tải và đội drone, trong đó mỗi phương tiện có thể thực hiện nhiều chuyến xuất phát từ depot, phải đáp ứng cửa sổ thời gian của từng khách và tuân thủ các ràng buộc về tải trọng, giới hạn pin drone, cũng như phân loại khách hàng theo loại phương tiện được phép phục vụ. Mục tiêu là tối thiểu hóa makespan --- thời điểm phương tiện cuối cùng trở về depot.
+
+Bài toán này mang ý nghĩa thực tiễn cao, trực tiếp phản ánh bài toán lập lịch vận hành trong các hệ thống giao hàng hiện đại. Một lời giải tốt giúp rút ngắn thời gian hoàn thành toàn bộ đơn hàng, từ đó giảm chi phí vận hành và nâng cao trải nghiệm khách hàng.
+
+% ============================================================
+\section{Các giải pháp hiện tại và hạn chế}
+\label{sec:giaiphap}
+% ============================================================
+
+Bài toán định tuyến phương tiện (Vehicle Routing Problem --- VRP) đã được nghiên cứu rộng rãi trong nhiều thập kỷ. Dantzig và Ramser đặt nền móng lý thuyết cho VRP từ năm 1959. Kể từ đó, nhiều biến thể được đề xuất nhằm phản ánh các ràng buộc thực tế, trong đó VRP với cửa sổ thời gian (VRPTW) là biến thể được nghiên cứu nhiều nhất solomon1987algorithms.
+
+Tuy nhiên, các nghiên cứu hiện tại còn một số hạn chế đáng kể. Thứ nhất, phần lớn các nghiên cứu chỉ xét mô hình một xe tải phối hợp với một hoặc vài drone, chưa giải quyết bài toán đa phương tiện tổng quát với nhiều xe tải và nhiều drone hoạt động đồng thời. Thứ hai, ràng buộc đa chuyến (multi-trip) --- mỗi phương tiện xuất phát nhiều lần từ depot trong một ca làm việc --- ít được xem xét đồng thời với cửa sổ thời gian, trong khi đây là thực tế phổ biến trong vận hành. Thứ ba, các phương pháp giải chính xác (exact methods) chỉ áp dụng được cho các bài toán quy mô nhỏ do độ phức tạp NP-hard của bài toán, trong khi các heuristic hiện có chưa khai thác đầy đủ cấu trúc đặc thù của bài toán drone với cửa sổ thời gian.
+
+% ============================================================
+\section{Mục tiêu và định hướng giải pháp}
+% ============================================================
+
+Mục tiêu của đồ án là xây dựng một thuật toán giải hiệu quả cho bài toán MVRPD-TW Multi-Trip, hướng đến tìm nghiệm khả thi chất lượng cao trong thời gian chấp nhận được cho các bài toán quy mô thực tế.
+
+Để đạt mục tiêu trên, đồ án theo hướng tiếp cận metaheuristic, cụ thể là Tabu Search, vốn đã chứng minh hiệu quả trên nhiều biến thể VRP. Giải pháp được xây dựng theo hai giai đoạn. Giai đoạn đầu sử dụng thuật toán Greedy Insertion để xây dựng nhanh một lời giải ban đầu hợp lệ, trong đó khách hàng được phân công theo thứ tự cửa sổ thời gian hẹp nhất trước (Earliest Due Date) và ưu tiên phân công cho drone khi điều kiện cho phép. Giai đoạn hai áp dụng Tabu Search với năm toán tử lân cận đặc thù (Relocate, Or-opt(2), Swap, 2-opt, Cross-trip) cùng toán tử Ruin \& Recreate để thoát khỏi cực tiểu địa phương, kết hợp với cơ chế Strategic Oscillation điều chỉnh động hệ số phạt nhằm cân bằng giữa thám hiểm và khai thác không gian nghiệm.
+
+% ============================================================
+\section{Đóng góp của đồ án}
+% ============================================================
+
+Đồ án này có ba đóng góp chính như sau:
+
+\begin{enumerate}
+    \item Đề xuất thuật toán Greedy Insertion có tích hợp chiến lược phân công ưu tiên drone theo thứ tự Earliest Due Date, tạo lời giải ban đầu khả thi cho bài toán MVRPD-TW Multi-Trip.
+
+    \item Xây dựng thuật toán Tabu Search với bộ năm toán tử lân cận chuyên biệt cho cấu trúc đa phương tiện đa chuyến, kết hợp cơ chế Strategic Oscillation điều chỉnh hệ số phạt động để cân bằng giữa tìm kiếm vùng khả thi và không khả thi.
+
+    \item Thực nghiệm và đánh giá thuật toán trên các bộ dữ liệu chuẩn, kiểm chứng tính đúng đắn của lời giải và chất lượng makespan so với nghiệm tham chiếu.
+\end{enumerate}
+
+% ============================================================
+\section{Bố cục đồ án}
+% ============================================================
+
+Phần còn lại của báo cáo được tổ chức như sau.
+
+Chương 2 trình bày các kiến thức nền tảng cần thiết, bao gồm định nghĩa hình thức bài toán MVRPD-TW Multi-Trip, các ràng buộc và hàm mục tiêu, cùng tổng quan về các phương pháp giải metaheuristic liên quan, đặc biệt là Tabu Search và các toán tử lân cận trong bài toán định tuyến phương tiện.
+
+Chương 3 trình bày giải pháp đề xuất của đồ án. Nội dung bao gồm thuật toán Greedy Insertion xây dựng lời giải ban đầu, thuật toán Tabu Search với năm toán tử lân cận và cơ chế Strategic Oscillation, cùng các chi tiết cài đặt như hàm mục tiêu mở rộng có phạt và chiến lược quản lý danh sách Tabu.
+
+Chương 4 trình bày kết quả thực nghiệm. Các bộ dữ liệu thử nghiệm được mô tả chi tiết, tiếp theo là phân tích kết quả về makespan, tính khả thi của nghiệm và thời gian thực thi, so sánh với nghiệm tham chiếu để đánh giá hiệu quả của thuật toán đề xuất.
+
+Chương 5 kết luận đồ án bằng cách tóm tắt các đóng góp chính, chỉ ra các hạn chế còn tồn tại và đề xuất hướng phát triển tiếp theo.
+
+\end{document}

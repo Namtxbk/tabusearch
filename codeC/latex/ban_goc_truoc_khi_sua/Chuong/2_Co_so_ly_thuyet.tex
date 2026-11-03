@@ -1,0 +1,107 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+% Chương này trình bày nền tảng lý thuyết cho giải pháp đề xuất. Phần~\ref{sec:ngucanh} mô tả bài toán MVRPD-TW Multi-Trip và hình thức hóa các ràng buộc. Phần~\ref{sec:relatedwork} phân tích các nghiên cứu liên quan và chỉ ra khoảng trống mà đồ án hướng đến lấp đầy. Phần~\ref{sec:vrp} và~\ref{sec:tabusearch} trình bày hai nền tảng lý thuyết cốt lõi: bài toán định tuyến phương tiện và phương pháp Tabu Search.
+
+% ============================================================
+\section{Ngữ cảnh bài toán}
+\label{sec:ngucanh}
+% ============================================================
+
+\subsection{Bài toán định tuyến phương tiện với drone và cửa sổ thời gian}
+
+Bài toán MVRPD-TW Multi-Trip được xây dựng trên một đồ thị hoàn chỉnh $G = (V, E)$, trong đó $V = \{0\} \cup C$ với nút $0$ là depot và $C = \{1, 2, \ldots, n\}$ là tập $n$ khách hàng. Mỗi cạnh $(i, j) \in E$ được gán khoảng cách Euclid $d_{ij}$ và thời gian di chuyển $\tau_{ij}^v = d_{ij} / \text{speed}^v$ tùy theo loại phương tiện $v$.
+
+Hệ thống gồm $K$ xe tải và $D$ drone, tất cả xuất phát và kết thúc tại depot. Mỗi phương tiện có thể thực hiện nhiều chuyến (multi-trip): sau khi hoàn thành một chuyến và trở về depot, phương tiện có thể xuất phát ngay chuyến tiếp theo.
+
+Khách hàng được chia thành hai loại. Khách loại C1 chỉ được phục vụ bởi xe tải. Khách loại C2 có thể được phục vụ bởi cả xe tải lẫn drone. Mỗi khách $i \in C$ có nhu cầu $q_i$, thời điểm mở cửa $e_i$ và thời hạn phục vụ $d_i$, tạo thành cửa sổ thời gian $[e_i, d_i]$. Phương tiện phải đến phục vụ khách $i$ không trễ hơn $d_i$; nếu đến sớm hơn $e_i$ thì phải chờ.
+
+Thời điểm đến tại nút thứ $k$ trong một chuyến được tính theo công thức:
+\[
+a_0 = t_{\text{start}}, \qquad
+a_k = \max\!\left(a_{k-1} + \tau(k{-}1,\, k),\; e_k\right) \quad \forall\, k \geq 1
+\]
+
+\subsection{Các ràng buộc}
+
+Lời giải phải thỏa mãn đồng thời bốn nhóm ràng buộc sau.
+
+\textbf{Tải trọng.} Tổng nhu cầu các khách trong một chuyến không được vượt năng lực phương tiện: $\sum_{i \in \sigma} q_i \leq Q^v$.
+
+\textbf{Cửa sổ thời gian.} Phương tiện phải đến phục vụ mỗi khách trước thời hạn: $a_i \leq d_i,\ \forall i \in \sigma$.
+
+\textbf{Giới hạn pin drone.} Tổng thời gian bay của một chuyến drone không được vượt giới hạn $T^D_{\max}$: $\sum_{(i,j) \in \sigma} \tau^D_{ij} \leq T^D_{\max}$.
+
+\textbf{Phân công phương tiện.} Drone chỉ được phục vụ khách loại C2.
+
+\subsection{Hàm mục tiêu}
+
+Mục tiêu là tối thiểu hóa makespan, tức thời điểm phương tiện cuối cùng trở về depot:
+\[
+\min\ \text{Makespan} = \max\!\left\{\max_{k=1}^{K} r_k^T,\ \max_{d=1}^{D} r_d^D\right\}
+\]
+trong đó $r_k^T$ và $r_d^D$ lần lượt là thời điểm xe tải $k$ và drone $d$ hoàn thành tất cả các chuyến.
+
+% ============================================================
+\section{Các nghiên cứu liên quan}
+\label{sec:relatedwork}
+% ============================================================
+
+\subsection{Bài toán VRP cổ điển và mở rộng với cửa sổ thời gian}
+
+Bài toán định tuyến phương tiện (VRP) được Dantzig và Ramser đặt nền móng từ năm 1959. Solomon đề xuất bộ benchmark chuẩn và các heuristic insertion cho biến thể VRPTW, đặt nền tảng cho phần lớn nghiên cứu sau này. Cordeau et al. phát triển Tabu Search thống nhất cho VRPTW, đạt kết quả cạnh tranh trên các bộ benchmark của Solomon.
+
+Biến thể đa chuyến (multi-trip VRP) được Fleischmann đề xuất nhằm mô hình hóa thực tế các phương tiện thực hiện nhiều tuyến trong một ca làm việc. Tuy nhiên, kết hợp đa chuyến với cửa sổ thời gian làm tăng đáng kể độ phức tạp tính toán và ít được nghiên cứu chuyên sâu.
+
+\subsection{Bài toán VRP với drone}
+
+Murray và Chu là một trong những công trình đầu tiên đề xuất mô hình phối hợp xe tải và drone, gọi là Flying Sidekick TSP (FSTSP), trong đó drone xuất phát từ xe tải, giao hàng và quay lại đón xe. Mô hình này giới hạn drone chỉ phục vụ một khách mỗi lần và phụ thuộc vào vị trí xe tải.
+
+Agatz et al. đề xuất mô hình TSP-D tổng quát hơn, trong đó drone xuất phát và quay về depot độc lập với xe tải. Nhóm tác giả đề xuất các heuristic dựa trên dynamic programming và xác nhận hiệu quả trên các bộ instance nhỏ.
+
+Ha et al. mở rộng sang bài toán đa khách với nhiều xe tải và drone, đề xuất heuristic tìm kiếm cục bộ. Moshref-Javadi et al. xây dựng mô hình hỗn hợp nguyên tuyến tính (MILP) và heuristic cho bài toán truck-drone với ràng buộc thời gian, nhưng chưa xét đến cấu trúc đa chuyến.
+
+\subsection{Hạn chế của các nghiên cứu hiện tại}
+
+Qua khảo sát, ba hạn chế chính được nhận thấy. Thứ nhất, phần lớn mô hình chỉ xét một xe tải và một drone, chưa giải quyết bài toán đa phương tiện tổng quát. Thứ hai, cấu trúc đa chuyến ít được kết hợp đồng thời với cửa sổ thời gian, trong khi đây là yêu cầu thực tế phổ biến. Thứ ba, các phương pháp giải chính xác chỉ áp dụng được cho bài toán quy mô nhỏ; các heuristic hiện có chưa khai thác đầy đủ cấu trúc đặc thù của bài toán drone đa chuyến với cửa sổ thời gian. Đồ án này hướng đến lấp đầy khoảng trống trên bằng cách đề xuất một metaheuristic Tabu Search cho bài toán MVRPD-TW Multi-Trip với bộ toán tử lân cận chuyên biệt.
+
+% ============================================================
+\section{Bài toán định tuyến phương tiện}
+\label{sec:vrp}
+% ============================================================
+
+\subsection{Phân loại bài toán VRP}
+
+VRP là bài toán tổ hợp NP-hard, trong đó cần xây dựng tập tuyến đường tối ưu cho đội phương tiện phục vụ tập khách hàng từ một depot trung tâm. Các biến thể phổ biến bao gồm: CVRP (ràng buộc tải trọng), VRPTW (cửa sổ thời gian), MDVRP (nhiều depot), và MTVRP (đa chuyến). Bài toán MVRPD-TW Multi-Trip trong đồ án này là sự kết hợp của VRPTW, MTVRP và mở rộng thêm phương tiện drone.
+
+\subsection{Phương pháp giải}
+
+Các phương pháp giải VRP được phân thành hai nhóm chính. Phương pháp chính xác (branch-and-bound, branch-and-cut, column generation) đảm bảo tìm được nghiệm tối ưu nhưng chỉ khả thi với bài toán quy mô nhỏ do thời gian tính toán tăng theo hàm mũ. Phương pháp xấp xỉ bao gồm heuristic (construction heuristic, local search) và metaheuristic (Tabu Search, Simulated Annealing, Genetic Algorithm, ALNS). Với bài toán quy mô thực tế, metaheuristic là lựa chọn phù hợp nhờ khả năng tìm nghiệm tốt trong thời gian chấp nhận được.
+
+% ============================================================
+\section{Tabu Search}
+\label{sec:tabusearch}
+% ============================================================
+
+\subsection{Nguyên lý hoạt động}
+
+Tabu Search (TS) là metaheuristic do Glover đề xuất, dựa trên tìm kiếm cục bộ có bộ nhớ ngắn hạn. Xuất phát từ một nghiệm ban đầu, TS lặp đi lặp lại việc chuyển sang nghiệm lân cận tốt nhất trong tập lân cận $\mathcal{N}(s)$, kể cả khi nghiệm đó tệ hơn nghiệm hiện tại. Để tránh quay vòng, danh sách Tabu $\mathcal{T}$ lưu lại các move vừa thực hiện và cấm đảo ngược chúng trong $\theta$ vòng lặp (tenure). Nghiệm tốt nhất tìm được trong suốt quá trình tìm kiếm được lưu riêng.
+
+\subsection{Các thành phần chính}
+
+\textbf{Cấu trúc lân cận.} Tập lân cận $\mathcal{N}(s)$ là tập các nghiệm thu được từ $s$ bằng cách áp dụng một toán tử move. Chất lượng của TS phụ thuộc rất lớn vào thiết kế toán tử lân cận phù hợp với cấu trúc bài toán.
+
+\textbf{Danh sách Tabu.} Danh sách Tabu lưu các thuộc tính của move vừa thực hiện. Move bị cấm trong $\theta$ vòng lặp tiếp theo nhằm ngăn đảo ngược ngay lập tức và buộc thuật toán thám hiểm vùng lân cận mới.
+
+\textbf{Aspiration Criterion.} Move bị Tabu vẫn được chấp nhận nếu nó tạo ra nghiệm tốt hơn nghiệm tốt nhất hiện tại $s^*$, tức $f(s') < f(s^*)$.
+
+\textbf{Strategic Oscillation.} Kỹ thuật này cho phép TS di chuyển qua cả vùng khả thi và không khả thi bằng cách điều chỉnh động hệ số phạt trong hàm mục tiêu, giúp cân bằng giữa khai thác (intensification) và thám hiểm (diversification).
+
+\subsection{Ứng dụng trong VRP}
+
+TS đã chứng minh hiệu quả vượt trội trên nhiều biến thể VRP. Gendreau et al. đề xuất thuật toán GENIUS kết hợp TS cho VRP cổ điển. Cordeau et al. phát triển TS thống nhất cho VRPTW, đạt kết quả tốt nhất trên nhiều benchmark của Solomon trong nhiều năm. Các kỹ thuật như toán tử Relocate, Or-opt, 2-opt và Swap đã trở thành bộ toán tử chuẩn trong TS cho VRP.
+
+\bigskip
+Chương này đã trình bày ngữ cảnh bài toán MVRPD-TW Multi-Trip với đầy đủ các ràng buộc và hàm mục tiêu, phân tích các nghiên cứu liên quan và chỉ ra ba hạn chế chính của các công trình hiện tại, đồng thời giới thiệu nền tảng lý thuyết về VRP và Tabu Search. Các kiến thức này là cơ sở trực tiếp cho giải pháp được đề xuất trong Chương~3.
+
+\end{document}

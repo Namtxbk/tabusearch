@@ -1,0 +1,140 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Chương này trình bày nền tảng lý thuyết cho giải pháp đề xuất. Mục~\ref{sec:ngucanh} phát biểu hình thức bài toán MVRPD-TW đa chuyến. Mục~\ref{sec:relatedwork} tổng quan các nghiên cứu liên quan và chỉ ra khoảng trống mà đồ án hướng đến. Mục~\ref{sec:vrp} và Mục~\ref{sec:tabusearch} lần lượt trình bày hai nền tảng lý thuyết cốt lõi là bài toán định tuyến phương tiện và phương pháp tìm kiếm Tabu.
+
+% ============================================================
+\section{Phát biểu bài toán}
+\label{sec:ngucanh}
+% ============================================================
+
+\subsection{Dữ liệu đầu vào}
+
+Bài toán được xây dựng trên một đồ thị đầy đủ $G = (V, E)$, trong đó $V = \{0\} \cup C$, nút $0$ là kho (depot) và $C = \{1, 2, \ldots, n\}$ là tập $n$ khách hàng. Mỗi nút $i$ có tọa độ phẳng $(x_i, y_i)$, và khoảng cách giữa hai nút là khoảng cách Euclid $d_{ij}$. Hệ thống có $m_T$ xe tải và $m_D$ drone, ký hiệu tập phương tiện là $K = K_T \cup K_D$. Xe tải di chuyển với vận tốc $v^T$ và drone với vận tốc $v^D$, nên thời gian di chuyển trên cạnh $(i, j)$ của phương tiện loại $k$ là
+\begin{equation}
+\tau^{k}_{ij} = \frac{d_{ij}}{v^{k}}, \qquad k \in \{T, D\}.
+\label{eq:traveltime}
+\end{equation}
+
+Mỗi khách hàng $i \in C$ có lượng hàng cần lấy $q_i$ và cửa sổ thời gian $[e_i, l_i]$, trong đó $e_i$ là thời điểm sớm nhất có thể phục vụ và $l_i$ là thời hạn phục vụ. Tập khách hàng được chia thành hai nhóm: nhóm $C_1$ gồm các khách chỉ được phục vụ bằng xe tải, và nhóm $C_2 = C \setminus C_1$ gồm các khách có thể được phục vụ bằng cả xe tải lẫn drone. Mỗi xe tải có tải trọng tối đa $Q^T$, mỗi drone có tải trọng tối đa $Q^D$ và thời gian bay tối đa của một chuyến là $L_D$. Cuối cùng, $L_w$ là thời gian tối đa hàng của một khách được phép nằm trên phương tiện kể từ lúc được lấy cho tới khi phương tiện về đến kho. Thời gian phục vụ tại khách được coi bằng $0$.
+
+\subsection{Cấu trúc lời giải}
+
+Một lời giải gán cho mỗi phương tiện $k \in K$ một dãy chuyến $R_k = (\sigma^1_k, \sigma^2_k, \ldots, \sigma^{p_k}_k)$. Mỗi chuyến là một dãy nút $\sigma = (0, i_1, i_2, \ldots, i_m, 0)$ bắt đầu và kết thúc tại kho. Vì một phương tiện chỉ thực hiện được một chuyến tại một thời điểm, các chuyến của cùng phương tiện được thực hiện tuần tự: chuyến đầu tiên xuất phát tại thời điểm $0$, và mỗi chuyến tiếp theo xuất phát đúng lúc chuyến trước trở về kho. Ký hiệu $s(\sigma)$ là thời điểm xuất phát của chuyến $\sigma$, thời điểm đến khách thứ $h$ trong chuyến được tính theo công thức
+\begin{equation}
+a_{i_0} = s(\sigma), \qquad
+a_{i_h} = \max\!\left(a_{i_{h-1}} + \tau^{k}_{i_{h-1} i_h},\; e_{i_h}\right), \quad h = 1, \ldots, m,
+\label{eq:arrival}
+\end{equation}
+trong đó $i_0 = 0$ là kho. Nói cách khác, nếu phương tiện đến sớm hơn $e_i$ thì phải chờ đến $e_i$ mới được phục vụ. Thời điểm chuyến trở về kho là $r(\sigma) = a_{i_m} + \tau^{k}_{i_m 0}$, và thời điểm xuất phát của chuyến kế tiếp là $s(\sigma^{j+1}_k) = r(\sigma^j_k)$. Thời điểm hoàn thành của phương tiện $k$ là $r_k = r(\sigma^{p_k}_k)$, hoặc $r_k = 0$ nếu phương tiện không được sử dụng.
+
+\subsection{Các ràng buộc}
+
+Một lời giải khả thi phải thỏa mãn đồng thời sáu nhóm ràng buộc sau.
+
+\textbf{Phục vụ đầy đủ.} Mỗi khách hàng $i \in C$ xuất hiện đúng một lần trong đúng một chuyến của đúng một phương tiện.
+
+\textbf{Loại phương tiện.} Khách thuộc nhóm $C_1$ chỉ được phục vụ bởi xe tải, tức là không có chuyến drone nào chứa khách thuộc $C_1$.
+
+\textbf{Tải trọng.} Tổng lượng hàng của một chuyến không vượt quá tải trọng của phương tiện thực hiện chuyến đó:
+\begin{equation}
+\mathrm{load}(\sigma) = \sum_{i \in \sigma} q_i \leq Q^{k}.
+\label{eq:capacity}
+\end{equation}
+
+\textbf{Thời gian bay của drone.} Tổng thời gian bay của mỗi chuyến drone không vượt quá giới hạn $L_D$:
+\begin{equation}
+t^{\mathrm{fly}}(\sigma) = \sum_{h=0}^{m} \tau^{D}_{i_h i_{h+1}} \leq L_D, \qquad i_{m+1} = 0.
+\label{eq:endurance}
+\end{equation}
+Trong dữ liệu thực nghiệm, giới hạn này được cho dưới dạng thời gian (giây) theo mô hình năng lượng \textit{endurance}, nên ràng buộc so sánh thời gian bay chứ không so sánh quãng đường.
+
+\textbf{Cửa sổ thời gian.} Phương tiện phải đến phục vụ mỗi khách không muộn hơn thời hạn của khách đó: $a_i \leq l_i$ với mọi $i \in C$.
+
+\textbf{Thời gian lưu hàng.} Hàng của khách $i$ được lấy tại thời điểm $a_i$ và chỉ được dỡ xuống khi chuyến chứa $i$ trở về kho. Thời gian lưu hàng trên phương tiện không được vượt quá $L_w$:
+\begin{equation}
+w_i = r(\sigma_i) - a_i \leq L_w, \qquad \forall i \in C,
+\label{eq:waiting}
+\end{equation}
+trong đó $\sigma_i$ là chuyến chứa khách $i$.
+
+Từ các ràng buộc trên có thể suy ra điều kiện \textit{tương thích tĩnh} giữa một khách và một phương tiện, tức là điều kiện cần để khách có thể được phục vụ bởi phương tiện đó dù được xếp vào chuyến nào. Khách $i$ tương thích với xe tải nếu $q_i \leq Q^T$ và $\tau^T_{i0} \leq L_w$. Khách $i$ tương thích với drone nếu $i \in C_2$, $q_i \leq Q^D$, $\tau^D_{0i} + \tau^D_{i0} \leq L_D$ và $\tau^D_{i0} \leq L_w$.
+
+\subsection{Hàm mục tiêu}
+
+Mục tiêu của bài toán là tối thiểu hóa makespan, tức thời điểm phương tiện cuối cùng hoàn thành tất cả các chuyến và trở về kho:
+\begin{equation}
+\min\ C_{\max} = \max_{k \in K} r_k.
+\label{eq:makespan}
+\end{equation}
+Khác với các biến thể VRP tối thiểu tổng quãng đường, hàm mục tiêu makespan đòi hỏi phải cân bằng khối lượng công việc giữa các phương tiện, vì chỉ phương tiện kết thúc muộn nhất (gọi là phương tiện \textit{critical}) quyết định giá trị mục tiêu.
+
+% ============================================================
+\section{Các nghiên cứu liên quan}
+\label{sec:relatedwork}
+% ============================================================
+
+\subsection{Bài toán VRP cổ điển và các mở rộng}
+
+Bài toán định tuyến phương tiện được Dantzig và Ramser giới thiệu năm 1959 dưới dạng bài toán điều phối xe chở xăng~\cite{dantzig1959truck}. Kể từ đó, rất nhiều biến thể đã được đề xuất để phản ánh các ràng buộc thực tế, được tổng kết đầy đủ trong chuyên khảo của Toth và Vigo~\cite{toth2014vehicle}. Solomon xây dựng bộ dữ liệu chuẩn và các heuristic chèn cho VRPTW~\cite{solomon1987algorithms}, đặt nền tảng cho phần lớn các nghiên cứu về cửa sổ thời gian sau này. Savelsbergh nghiên cứu cách thực hiện tìm kiếm cục bộ hiệu quả khi có cửa sổ thời gian, trong đó việc kiểm tra tính khả thi của một phép biến đổi là phần tốn kém nhất~\cite{savelsbergh1985local}.
+
+Biến thể đa chuyến (Multi-Trip VRP) cho phép mỗi phương tiện thực hiện nhiều tuyến trong một ca làm việc. Taillard, Laporte và Gendreau là một trong những nhóm đầu tiên đề xuất heuristic cho biến thể này~\cite{taillard1996vehicle}. Khảo sát của Cattaruzza và cộng sự cho thấy việc kết hợp đa chuyến với cửa sổ thời gian làm tăng đáng kể độ phức tạp, vì thời điểm bắt đầu của mỗi chuyến phụ thuộc vào toàn bộ các chuyến trước nó của cùng phương tiện~\cite{cattaruzza2016multitrip}.
+
+\subsection{Bài toán định tuyến có drone}
+
+Murray và Chu là những người đầu tiên mô hình hóa việc phối hợp xe tải và drone trong giao hàng, với hai bài toán Flying Sidekick TSP và Parallel Drone Scheduling TSP~\cite{murray2015flying}. Ở bài toán thứ nhất, drone được phóng từ xe tải, giao hàng cho một khách rồi gặp lại xe tại một điểm khác. Ở bài toán thứ hai, drone hoạt động độc lập từ kho, song song với xe tải. Agatz và cộng sự nghiên cứu bài toán TSP-D, đề xuất mô hình quy hoạch nguyên và các heuristic dựa trên quy hoạch động~\cite{agatz2018optimization}. Ha và cộng sự xét biến thể tối thiểu chi phí của TSP-D và đề xuất heuristic GRASP kết hợp tìm kiếm cục bộ~\cite{ha2018min}. Wang, Poikonen và Golden mở rộng mô hình cho nhiều xe tải và nhiều drone và chứng minh các cận trường hợp xấu nhất về mức giảm makespan mà drone có thể mang lại~\cite{wang2017vehicle}. Các khảo sát gần đây của Chung và cộng sự~\cite{chung2020optimization} và Macrina và cộng sự~\cite{macrina2020drone} cho thấy số lượng nghiên cứu về chủ đề này tăng rất nhanh, nhưng phần lớn tập trung vào mô hình giao hàng với một xe tải.
+
+\subsection{Khoảng trống nghiên cứu}
+
+Qua khảo sát, có thể nhận thấy ba khoảng trống chính. Thứ nhất, phần lớn mô hình chỉ xét một xe tải và một hoặc vài drone, chưa xét đầy đủ trường hợp nhiều xe tải và nhiều drone hoạt động độc lập từ kho. Thứ hai, cấu trúc đa chuyến hiếm khi được kết hợp đồng thời với cửa sổ thời gian và ràng buộc thời gian lưu hàng, trong khi đây là yêu cầu điển hình của bài toán gom hàng. Thứ ba, do độ khó của bài toán, phương pháp chính xác chỉ áp dụng được cho các bài toán nhỏ, còn các heuristic hiện có thường chỉ dùng những toán tử lân cận ở mức khách hàng mà chưa khai thác cấu trúc chuỗi chuyến của từng phương tiện. Đồ án hướng đến lấp khoảng trống trên bằng một thuật toán Tabu Search với bộ toán tử lân cận dành riêng cho cấu trúc nhiều phương tiện -- nhiều chuyến.
+
+% ============================================================
+\section{Bài toán định tuyến phương tiện}
+\label{sec:vrp}
+% ============================================================
+
+\subsection{Phân loại bài toán VRP}
+
+VRP là bài toán tối ưu tổ hợp thuộc lớp NP-khó~\cite{lenstra1981complexity}, trong đó cần xây dựng tập tuyến đường cho một đội phương tiện để phục vụ tập khách hàng từ một kho trung tâm. Các biến thể phổ biến gồm CVRP với ràng buộc tải trọng, VRPTW với cửa sổ thời gian, MDVRP với nhiều kho, và MTVRP với nhiều chuyến cho mỗi phương tiện. Bài toán của đồ án là sự kết hợp của VRPTW và MTVRP, được mở rộng thêm đội phương tiện không đồng nhất gồm xe tải và drone, với hàm mục tiêu makespan thay cho tổng chi phí.
+
+\subsection{Các phương pháp giải}
+
+Các phương pháp giải VRP được chia thành hai nhóm. Nhóm phương pháp chính xác, gồm nhánh cận, nhánh cắt và sinh cột, đảm bảo tìm được lời giải tối ưu nhưng thời gian tính toán tăng theo hàm mũ, nên chỉ phù hợp với bài toán quy mô nhỏ. Nhóm phương pháp xấp xỉ gồm các heuristic xây dựng, tìm kiếm cục bộ và các metaheuristic như Tabu Search, mô phỏng luyện kim, giải thuật di truyền hay tìm kiếm lân cận lớn thích nghi (ALNS)~\cite{ropke2006adaptive}. Với bài toán quy mô thực tế, metaheuristic là lựa chọn phù hợp nhờ khả năng tìm lời giải tốt trong thời gian chấp nhận được.
+
+\subsection{Các toán tử lân cận cổ điển}
+
+Phần lớn các thuật toán tìm kiếm cục bộ cho VRP sử dụng một tập toán tử lân cận chuẩn. Toán tử \textit{Relocate} chuyển một khách sang vị trí khác, có thể trên tuyến khác. Toán tử \textit{Or-opt} chuyển một đoạn gồm hai hoặc ba khách liên tiếp. Toán tử \textit{Swap} đổi chỗ hai khách. Toán tử \textit{2-opt} do Croes đề xuất đảo ngược một đoạn trong tuyến để loại bỏ các cạnh cắt nhau~\cite{croes1958method}. Toán tử \textit{2-opt*} (hay \textit{Cross}) của Potvin và Rousseau đổi phần đuôi giữa hai tuyến, rất hiệu quả khi có cửa sổ thời gian vì không đảo chiều các đoạn tuyến~\cite{potvin1995exchange}. Với bài toán đa chuyến, còn có thể định nghĩa thêm các toán tử ở mức chuyến, ví dụ chuyển nguyên một chuyến sang vị trí khác trong chuỗi chuyến hoặc sang phương tiện khác.
+
+% ============================================================
+\section{Tìm kiếm Tabu}
+\label{sec:tabusearch}
+% ============================================================
+
+\subsection{Nguyên lý hoạt động}
+
+Tìm kiếm Tabu (Tabu Search -- TS) là metaheuristic do Glover đề xuất~\cite{glover1986future} và được hệ thống hóa trong chuyên khảo của Glover và Laguna~\cite{glover1997tabu}. TS dựa trên tìm kiếm cục bộ có bộ nhớ ngắn hạn. Xuất phát từ một lời giải ban đầu, ở mỗi vòng lặp TS chuyển sang lời giải tốt nhất trong tập lân cận $\mathcal{N}(s)$ của lời giải hiện tại $s$, kể cả khi lời giải đó tệ hơn $s$. Nhờ chấp nhận các bước đi xấu đi, TS có thể vượt qua cực tiểu địa phương. Để tránh quay lại những lời giải vừa đi qua, TS lưu thuộc tính của các bước đi gần đây vào danh sách Tabu và cấm đảo ngược chúng trong một số vòng lặp gọi là \textit{tenure}. Lời giải tốt nhất tìm được trong suốt quá trình được lưu riêng và trả về khi thuật toán dừng.
+
+\subsection{Các thành phần chính}
+
+\textbf{Cấu trúc lân cận.} Tập lân cận $\mathcal{N}(s)$ là tập các lời giải thu được từ $s$ bằng cách áp dụng một toán tử biến đổi (move). Chất lượng của TS phụ thuộc rất lớn vào việc thiết kế toán tử phù hợp với cấu trúc bài toán và vào kích thước của tập lân cận được duyệt ở mỗi vòng.
+
+\textbf{Danh sách Tabu.} Danh sách Tabu không lưu toàn bộ lời giải mà chỉ lưu các thuộc tính, chẳng hạn một cạnh vừa bị xóa hay một phép gán khách cho phương tiện vừa bị thay đổi. Một move bị coi là Tabu nếu nó khôi phục lại thuộc tính còn trong danh sách. Lưu thuộc tính giúp việc kiểm tra nhanh nhưng có thể cấm cả những lời giải chưa từng được thăm.
+
+\textbf{Tiêu chí mong đợi (aspiration).} Để không bỏ lỡ lời giải tốt do việc cấm quá chặt, một move bị Tabu vẫn được chấp nhận nếu nó tạo ra lời giải tốt hơn lời giải tốt nhất hiện có.
+
+\textbf{Dao động chiến lược (Strategic Oscillation).} Kỹ thuật này cho phép TS đi qua cả vùng khả thi và vùng không khả thi bằng cách đưa các vi phạm ràng buộc vào hàm mục tiêu dưới dạng phạt với hệ số được điều chỉnh động. Khi lời giải vi phạm một ràng buộc quá thường xuyên, hệ số phạt của ràng buộc đó được tăng để đẩy tìm kiếm trở về vùng khả thi. Ngược lại, khi ràng buộc luôn được thỏa mãn, hệ số phạt được giảm để tìm kiếm có thể đi qua vùng không khả thi tới những vùng mới~\cite{glover1997tabu, cordeau2001unified}.
+
+\textbf{Đa dạng hóa.} Khi tìm kiếm bị kẹt lâu trong một vùng, có thể chủ động đưa lời giải tới vùng khác của không gian tìm kiếm. Một kỹ thuật phổ biến là phá hủy -- tái tạo (Ruin \& Recreate): xóa một phần khách khỏi lời giải rồi chèn lại theo một heuristic xây dựng~\cite{shaw1998using, schrimpf2000record}.
+
+\subsection{Chọn toán tử thích nghi}
+
+Khi có nhiều toán tử lân cận, việc chạy tất cả toán tử ở mọi vòng lặp cho chất lượng tốt nhưng tốn nhiều thời gian. Một hướng khác là ở mỗi vòng chỉ chọn một toán tử. Toán tử có thể được chọn ngẫu nhiên, theo vòng tuần tự, hoặc theo trọng số được học dần từ hiệu quả của từng toán tử. Cơ chế học trọng số được Ropke và Pisinger sử dụng trong ALNS~\cite{ropke2006adaptive}: mỗi toán tử được cộng điểm khi tạo ra lời giải tốt nhất mới, lời giải cải thiện hoặc lời giải được chấp nhận, và trọng số được cập nhật định kỳ theo điểm trung bình của từng đoạn vòng lặp.
+
+\subsection{Ứng dụng trong VRP}
+
+TS đã chứng minh hiệu quả trên nhiều biến thể VRP. Gendreau, Hertz và Laporte đề xuất thuật toán TABUROUTE cho VRP cổ điển, cho phép đi qua lời giải không khả thi với hệ số phạt điều chỉnh động~\cite{gendreau1994tabu}. Cordeau, Laporte và Mercier phát triển thuật toán TS thống nhất cho nhiều biến thể VRPTW, dùng thuộc tính gán khách cho tuyến trong danh sách Tabu và điều chỉnh hệ số phạt theo tỉ lệ lời giải khả thi~\cite{cordeau2001unified}. Các toán tử Relocate, Or-opt, Swap, 2-opt và 2-opt* đã trở thành bộ toán tử tiêu chuẩn trong các thuật toán TS cho VRP.
+
+\bigskip
+Chương này đã phát biểu hình thức bài toán MVRPD-TW đa chuyến với đầy đủ dữ liệu, ràng buộc và hàm mục tiêu, tổng quan các nghiên cứu liên quan và trình bày cơ sở lý thuyết về VRP và Tabu Search. Đây là cơ sở trực tiếp cho giải pháp được đề xuất ở Chương~3.
+
+\end{document}

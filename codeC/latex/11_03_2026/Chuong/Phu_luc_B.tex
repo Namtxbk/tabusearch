@@ -1,0 +1,58 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Phụ lục này mô tả cách biên dịch và chạy chương trình cài đặt thuật toán, cũng như cách tái tạo lại các kết quả thực nghiệm ở Chương~5.
+
+\section{Cấu trúc mã nguồn}
+
+Mã nguồn được viết bằng C++17 và tổ chức thành các tệp tiêu đề tương ứng với từng thành phần của thuật toán, được liệt kê trong Bảng~\ref{tab:src}. Tệp \texttt{main.cpp} đọc tham số dòng lệnh, chạy thuật toán trên từng bộ dữ liệu và ghi kết quả.
+
+\begin{table}[H]
+\centering
+\caption{Các tệp mã nguồn chính}
+\label{tab:src}
+\begin{tabular}{ll}
+\toprule
+\textbf{Tệp} & \textbf{Nội dung} \\
+\midrule
+\texttt{instance.hpp} & Đọc dữ liệu bài toán từ tệp JSON \\
+\texttt{solution.hpp} & Cấu trúc chuyến, phương tiện, lời giải và hệ số phạt \\
+\texttt{schedule.hpp} & Tương thích tĩnh và tính lịch của phương tiện \\
+\texttt{evaluate.hpp}, \texttt{feasibility.hpp} & Hàm mục tiêu, các đại lượng vi phạm, tính khả thi \\
+\texttt{construction.hpp} & Greedy Insertion \\
+\texttt{operators.hpp}, \texttt{evaluate\_move.hpp} & Sáu toán tử lân cận và đánh giá move \\
+\texttt{select\_components.hpp} & Chọn thành phần tìm kiếm \\
+\texttt{candidate\_pool.hpp}, \texttt{operator\_weights.hpp} & Bốn chiến lược sinh lân cận, trọng số thích nghi \\
+\texttt{tabu.hpp}, \texttt{select\_move.hpp} & Danh sách Tabu, tiêu chí mong đợi, chọn ứng viên \\
+\texttt{strategic\_oscillation.hpp} & Điều chỉnh hệ số phạt \\
+\texttt{ruin\_recreate.hpp} & Ruin \& Recreate \\
+\texttt{tabu\_search.hpp} & Vòng lặp chính của Adaptive Tabu Search \\
+\texttt{validator.hpp} & Bộ kiểm tra lời giải độc lập \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Biên dịch và chạy chương trình}
+
+Chương trình được biên dịch bằng lệnh
+\begin{quote}
+\texttt{g++ -std=c++17 -O2 -static main.cpp -o solver.exe}
+\end{quote}
+và được chạy với cú pháp
+\begin{quote}
+\texttt{solver.exe [tệp.json] --mode=M --sample=N --seed=S --iter=I --time=T}
+\end{quote}
+trong đó \texttt{M} là chiến lược sinh lân cận (\texttt{all}, \texttt{random}, \texttt{seq} hoặc \texttt{adaptive}), \texttt{N} là số move lấy mẫu mỗi vòng, \texttt{S} là seed ngẫu nhiên, \texttt{I} là số vòng lặp tối đa và \texttt{T} là giới hạn thời gian cho mỗi bài toán tính bằng giây. Nếu không truyền tên tệp, chương trình chạy lần lượt toàn bộ các tệp trong thư mục \texttt{data}. Với chiến lược \texttt{adaptive}, có thể chỉnh thêm độ dài đoạn cập nhật, hệ số phản ứng và các mức điểm thưởng bằng các tùy chọn \texttt{--aos-seg}, \texttt{--aos-r} và \texttt{--aos-scores}.
+
+Với mỗi bài toán, chương trình ghi một tệp chi tiết vào thư mục \texttt{record}, gồm nhật ký tìm kiếm, lời giải tốt nhất, số vòng lặp dùng mỗi toán tử và kết quả kiểm tra của validator. Sau mỗi lần chạy, chương trình ghi một tệp báo cáo tổng hợp vào thư mục \texttt{report}, gồm bảng makespan, các đại lượng vi phạm và thống kê thời gian của mọi bài toán.
+
+\section{Tái tạo kết quả thực nghiệm}
+
+Kết quả ở Mục~\ref{sec:exp_seqrand} được tạo bằng cách chạy mỗi chiến lược với năm seed:
+\begin{quote}
+\texttt{solver.exe --mode=seq --sample=1000 --seed=S --time=3000 --iter=1000000000}\\
+\texttt{solver.exe --mode=random --sample=1000 --seed=S --time=3000 --iter=1000000000}
+\end{quote}
+với $S = 1, 2, 3, 4, 5$. Sau đó, tập lệnh \texttt{report/tong\_hop\_seq\_random.py} đọc mười tệp báo cáo và tạo các bảng tổng hợp ở Bảng~\ref{tab:seqrand_total}, còn tập lệnh \texttt{report/sinh\_phu\_luc\_A.py} tạo các bảng chi tiết ở Phụ lục~A. Do thuật toán dùng bộ sinh số ngẫu nhiên với seed cố định, cùng một seed sẽ cho cùng dãy lời giải, nhưng vì điều kiện dừng có xét thời gian, kết quả có thể khác nhau rất ít giữa các máy có tốc độ khác nhau.
+
+\end{document}

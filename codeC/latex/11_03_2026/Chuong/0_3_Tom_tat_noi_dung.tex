@@ -1,0 +1,17 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+\begin{center}
+    \Large{\textbf{TÓM TẮT NỘI DUNG ĐỒ ÁN}}\\
+\end{center}
+\vspace{1cm}
+Logistics chặng cuối là khâu tốn kém nhất của chuỗi cung ứng, và việc phối hợp xe tải với drone được xem là một hướng đi hứa hẹn để rút ngắn thời gian phục vụ. Đồ án nghiên cứu bài toán lập lịch và định tuyến lấy hàng cho hệ thống vận tải phối hợp nhiều xe tải và nhiều drone có cửa sổ thời gian, trong đó mỗi phương tiện có thể thực hiện nhiều chuyến, hàng không được lưu trên phương tiện quá một ngưỡng thời gian, một số khách chỉ được phục vụ bằng xe tải, và mục tiêu là tối thiểu hóa thời điểm hoàn thành của phương tiện cuối cùng (makespan). Các nghiên cứu hiện có phần lớn chỉ xét một xe tải với một hoặc vài drone, ít kết hợp đồng thời cấu trúc đa chuyến với cửa sổ thời gian, còn các phương pháp chính xác chỉ giải được bài toán nhỏ do bài toán thuộc lớp NP-khó. Vì vậy, đồ án lựa chọn hướng tiếp cận metaheuristic dựa trên tìm kiếm Tabu, vốn đã chứng minh hiệu quả trên nhiều biến thể của bài toán định tuyến phương tiện. Giải pháp đề xuất gồm hai giai đoạn. Giai đoạn đầu xây dựng lời giải ban đầu bằng thuật toán chèn tham lam theo thứ tự thời hạn sớm nhất. Giai đoạn sau cải thiện lời giải bằng thuật toán Adaptive Tabu Search với sáu toán tử lân cận, trong đó có toán tử di chuyển nguyên một chuyến, kết hợp hàm mục tiêu có phạt với hệ số được điều chỉnh động bằng Strategic Oscillation và cơ chế đa dạng hóa Ruin \& Recreate. Đồ án cũng xây dựng bốn chiến lược sinh lân cận và phân tích độ phức tạp của chúng. Đóng góp chính của đồ án gồm mô hình hóa bài toán và chứng minh tính NP-khó, thuật toán Adaptive Tabu Search cùng chương trình cài đặt có bộ kiểm tra lời giải độc lập, và đánh giá thực nghiệm trên 80 bộ dữ liệu có từ 6 đến 100 khách. Kết quả cho thấy thuật toán luôn tìm được lời giải khả thi, đạt đúng lời giải tham chiếu ở 35 trên 36 bài toán có tối đa 12 khách, và chênh lệch trung bình khoảng 1,9\% so với tham chiếu trên toàn bộ dữ liệu. So sánh qua năm lần chạy độc lập cho thấy chiến lược chọn toán tử tuần tự cho chất lượng tốt hơn nhẹ so với chiến lược chọn ngẫu nhiên, còn chiến lược ngẫu nhiên nhanh hơn khoảng 9\%.
+
+\begin{flushright}
+Sinh viên thực hiện\\
+\begin{tabular}{@{}c@{}}
+\textit{(Ký và ghi rõ họ tên)}
+\end{tabular}
+\end{flushright}
+
+\end{document}

@@ -1,0 +1,111 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Chương này phân tích lý thuyết bài toán và thuật toán đề xuất. Mục~\ref{sec:nphard} chứng minh bài toán MVRPD-TW đa chuyến thuộc lớp NP-khó, qua đó lý giải việc lựa chọn hướng tiếp cận metaheuristic. Mục~\ref{sec:complexity} phân tích độ phức tạp tính toán của từng thành phần trong thuật toán. Mục~\ref{sec:seqrand} so sánh về mặt xác suất hai chiến lược chọn toán tử tuần tự và ngẫu nhiên, làm cơ sở cho thí nghiệm ở Chương~5.
+
+Trong chương này, $n$ là số khách hàng, $|K| = m_T + m_D$ là số phương tiện, $p = \sum_{k} p_k$ là tổng số chuyến của lời giải, $S_c$ và $S_t$ lần lượt là tập khách và tập chuyến được chọn ở bước chọn thành phần tìm kiếm (Mục~\ref{subsec:components}), và $N_s$ là số move được lấy mẫu ở mỗi vòng lặp. Vì mỗi khách thuộc đúng một chuyến và mỗi chuyến chứa ít nhất một khách, ta luôn có $p \leq n$.
+
+% ============================================================
+\section{Độ khó của bài toán}
+\label{sec:nphard}
+% ============================================================
+
+\textbf{Mệnh đề 4.1.} \textit{Bài toán MVRPD-TW đa chuyến với hàm mục tiêu makespan là bài toán NP-khó.}
+
+\textit{Chứng minh.} Ta quy dẫn bài toán người du lịch (TSP) với khoảng cách Euclid, vốn là bài toán NP-khó~\cite{lenstra1981complexity}, về một trường hợp riêng của bài toán. Cho một bộ dữ liệu TSP gồm kho và $n$ điểm trên mặt phẳng, ta xây dựng bộ dữ liệu MVRPD-TW gồm cùng các điểm đó, với $m_T = 1$ xe tải vận tốc $v^T = 1$, $m_D = 0$ drone, tải trọng $Q^T = \infty$, cửa sổ thời gian $[e_i, l_i] = [0, \infty)$ và $L_w = \infty$. Khi đó mọi ràng buộc tải trọng, thời gian bay, cửa sổ thời gian và thời gian lưu hàng đều được thỏa mãn, và không có thời gian chờ vì $e_i = 0$. Makespan của một lời giải bằng tổng độ dài các chuyến của xe tải.
+
+Xét một lời giải có nhiều chuyến $(0, \ldots, 0), (0, \ldots, 0), \ldots$. Nối các chuyến này thành một chu trình duy nhất bằng cách bỏ các lần quay về kho ở giữa, tức là thay mỗi cặp cạnh $(i, 0), (0, j)$ bằng cạnh $(i, j)$. Theo bất đẳng thức tam giác của khoảng cách Euclid, $d_{ij} \leq d_{i0} + d_{0j}$, nên chu trình thu được có độ dài không lớn hơn. Do đó luôn tồn tại một lời giải tối ưu chỉ gồm một chuyến, và makespan tối ưu bằng đúng độ dài chu trình TSP ngắn nhất. Phép xây dựng trên thực hiện được trong thời gian đa thức. Vì vậy, nếu giải được bài toán MVRPD-TW đa chuyến trong thời gian đa thức thì cũng giải được TSP trong thời gian đa thức. Suy ra bài toán MVRPD-TW đa chuyến là NP-khó. $\square$
+
+Mệnh đề 4.1 cho thấy không thể kỳ vọng một thuật toán chính xác giải được bài toán với thời gian đa thức, trừ khi P = NP. Hơn nữa, bài toán đầy đủ còn chứa ràng buộc cửa sổ thời gian, mà Savelsbergh đã chỉ ra rằng chỉ riêng việc tìm một lời giải khả thi cho bài toán người du lịch có cửa sổ thời gian đã là bài toán NP-đầy đủ~\cite{savelsbergh1985local}. Vì vậy, với số phương tiện cố định, ngay cả việc tìm được một lời giải khả thi của bài toán cũng có thể khó. Điều này lý giải việc đồ án lựa chọn hướng tiếp cận metaheuristic và cho phép tìm kiếm đi qua vùng không khả thi.
+
+% ============================================================
+\section{Độ phức tạp tính toán của thuật toán}
+\label{sec:complexity}
+% ============================================================
+
+\subsection{Tính lịch và đánh giá lời giải}
+
+Lịch của một phương tiện được tính bằng cách duyệt tuần tự các chuyến và các khách trong mỗi chuyến theo công thức~\eqref{eq:arrival}. Mỗi khách được xét đúng một lần với chi phí hằng số, nên thời gian tính lịch của phương tiện $k$ là $O(n_k + p_k)$, trong đó $n_k$ là số khách của phương tiện. Các đại lượng vi phạm $\bar{V}_Q, \bar{V}_D, \bar{V}_{TW}, \bar{V}_W$ được tính ngay trong lượt duyệt này và lưu theo từng phương tiện. Vì vậy, đánh giá toàn bộ một lời giải có độ phức tạp $O(n + p + |K|) = O(n + |K|)$.
+
+Khi đánh giá một move, chương trình chỉ sao chép và tính lại các phương tiện bị move tác động, thường là một hoặc hai phương tiện, rồi tổng hợp lại các đại lượng đã lưu của những phương tiện khác trong $O(|K|)$. Trong trường hợp xấu nhất, một phương tiện chứa gần hết khách, nên chi phí đánh giá một move là
+\begin{equation}
+T_{\text{eval}} = O(n + |K|).
+\label{eq:teval}
+\end{equation}
+
+\subsection{Xây dựng lời giải ban đầu}
+
+Bước sắp xếp khách theo $l_i$ tốn $O(n \log n)$. Khi chèn khách thứ $j$, số vị trí chèn có thể trên một phương tiện bằng số vị trí trong các chuyến hiện có cộng với số vị trí mở chuyến mới, tổng cộng trên mọi phương tiện là $O(j + p + |K|) = O(n + |K|)$. Mỗi vị trí được đánh giá với chi phí~\eqref{eq:teval}. Do đó độ phức tạp của Greedy Insertion là
+\begin{equation}
+T_{\text{greedy}} = O\!\left(n \log n + n\,(n + |K|)^2\right) = O\!\left(n\,(n + |K|)^2\right).
+\end{equation}
+Với $|K| \leq n$ như trong mọi bộ dữ liệu thực nghiệm, độ phức tạp này là $O(n^3)$.
+
+\subsection{Kích thước lân cận của các toán tử}
+
+Bảng~\ref{tab:nbsize} tổng hợp số move mà mỗi toán tử sinh ra trong một vòng lặp, trước và sau khi áp dụng giới hạn lấy mẫu đã nêu ở Mục~\ref{subsec:operators}. Ở cột thứ hai, $\ell$ là độ dài lớn nhất của một chuyến được chọn.
+
+\begin{table}[H]
+\centering
+\caption{Số move sinh ra trong một vòng lặp của từng toán tử}
+\label{tab:nbsize}
+\begin{tabular}{lll}
+\toprule
+\textbf{Toán tử} & \textbf{Khi duyệt đầy đủ} & \textbf{Khi có giới hạn lấy mẫu} \\
+\midrule
+Relocate      & $O(|S_c|\,(n + p + |K|))$       & $O(80\,|S_c|)$ \\
+Or-opt(2)     & $O(\sum_{\sigma \in S_t} |\sigma| \cdot (n + p + |K|))$ & $O(80 \sum_{\sigma \in S_t} |\sigma|)$ \\
+Swap          & $O(|S_c|^2)$                     & $\leq 600$ \\
+2-opt         & $O(\sum_{\sigma \in S_t} |\sigma|^2)$ & $O(|S_t|\,\ell^2)$ \\
+Cross-trip    & $O(|S_t|^2\,\ell^2)$             & $\leq 800$ \\
+Trip-relocate & $O(|S_t|\,(p + |K|))$            & $O(|S_t|\,(p + |K|))$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Có thể thấy Relocate và Or-opt(2) là hai toán tử có lân cận lớn nhất, vì mỗi khách hoặc mỗi khối có thể được chèn vào gần như mọi vị trí trong lời giải. Không có giới hạn lấy mẫu, tổng số move của một vòng lặp ở chiến lược \texttt{all} có thể đạt $O(n^2)$, và với chi phí đánh giá~\eqref{eq:teval} thì một vòng lặp tốn $O(n^3)$. Giới hạn lấy mẫu đưa số move của mỗi toán tử về $O(n)$ với hằng số nhỏ hơn nhiều.
+
+\subsection{Chi phí một vòng lặp theo từng chiến lược}
+
+Gọi $G_o$ là số move do toán tử $o$ sinh ra và $G = \sum_o G_o$. Việc liệt kê move có chi phí hằng số cho mỗi move, còn việc đánh giá có chi phí~\eqref{eq:teval}. Bỏ qua phần chi phí nhỏ của bước chọn thành phần tìm kiếm và kiểm tra Tabu, chi phí một vòng lặp của chiến lược \texttt{all} là
+\begin{equation}
+T_{\text{all}} = O\!\left(G\,(n + |K|)\right),
+\end{equation}
+còn chi phí một vòng lặp của các chiến lược \texttt{random}, \texttt{seq} và \texttt{adaptive}, khi dùng toán tử $o$, là
+\begin{equation}
+T_{o} = O\!\left(G_o + \min(G_o, N_s)\,(n + |K|)\right).
+\end{equation}
+Như vậy, với $N_s$ cố định, chi phí đánh giá của một vòng lặp ở ba chiến lược chỉ chọn một toán tử được chặn trên bởi $O(N_s\,(n + |K|))$, tức là tăng tuyến tính theo $n$, trong khi chiến lược \texttt{all} tăng theo tích của tổng kích thước lân cận với $n$. Đổi lại, mỗi vòng lặp của chiến lược \texttt{all} xét được nhiều move hơn và thường chọn được move tốt hơn. Đây là sự đánh đổi giữa số vòng lặp thực hiện được trong một ngân sách thời gian và chất lượng của từng vòng lặp, và cũng là lý do thực nghiệm ở Chương~5 so sánh các chiến lược với cùng ngân sách thời gian thay vì cùng số vòng lặp.
+
+\subsection{Danh sách Tabu, Strategic Oscillation và Ruin \& Recreate}
+
+Danh sách Tabu được cài đặt bằng bảng băm, nên mỗi lần tra cứu hoặc ghi một thuộc tính tốn thời gian trung bình $O(1)$. Một move tác động tới tối đa hai chuyến, nên số thuộc tính cạnh cần kiểm tra cho mỗi ứng viên là $O(\ell)$. Chi phí kiểm tra Tabu của một ứng viên vì vậy nhỏ hơn chi phí đánh giá~\eqref{eq:teval}. Strategic Oscillation chỉ cập nhật bốn bộ đếm ở mỗi vòng và bốn hệ số sau mỗi $L_\lambda$ vòng, nên có chi phí $O(1)$ cho mỗi vòng lặp.
+
+Ruin \& Recreate xóa $q = \lfloor \rho\, n \rfloor$ khách, mỗi khách được chèn lại bằng best insertion với chi phí $O((n + |K|)^2)$ như ở Greedy Insertion. Mỗi lần thử có độ phức tạp $O(\rho\, n\,(n + |K|)^2)$, và có tối đa năm lần thử. Vì Ruin \& Recreate chỉ được kích hoạt sau ít nhất $H_{\text{div}}$ vòng lặp không cải thiện, chi phí trung bình của nó trên mỗi vòng lặp là
+\begin{equation}
+O\!\left(\frac{\rho\, n\,(n + |K|)^2}{H_{\text{div}}}\right).
+\end{equation}
+
+\subsection{Độ phức tạp tổng thể}
+
+Gọi $I$ là số vòng lặp thực hiện được trước khi dừng. Với các chiến lược chỉ chọn một toán tử, thời gian chạy của toàn bộ thuật toán là
+\begin{equation}
+T = O\!\left(n\,(n + |K|)^2 + I\left(N_s\,(n + |K|) + \frac{\rho\, n\,(n + |K|)^2}{H_{\text{div}}}\right)\right).
+\end{equation}
+Bộ nhớ cần dùng gồm lời giải hiện tại, hai lời giải tham chiếu và tập ứng viên của một vòng lặp, mỗi lời giải chiếm $O(n + |K|)$. Do đó bộ nhớ là $O(N_s\,(n + |K|))$ cùng với kích thước danh sách Tabu, vốn bị chặn bởi số thuộc tính được ghi trong khoảng $2\theta_0$ vòng lặp gần nhất.
+
+% ============================================================
+\section{So sánh chiến lược chọn toán tử tuần tự và ngẫu nhiên}
+\label{sec:seqrand}
+% ============================================================
+
+Hai chiến lược \texttt{seq} và \texttt{random} có cùng chi phí cho mỗi vòng lặp và chỉ khác nhau ở cách chọn toán tử. Mục này phân tích sự khác biệt đó về mặt xác suất, với giả thiết đơn giản hóa là toán tử được chọn luôn sinh được ứng viên hợp lệ.
+
+Với chiến lược \texttt{seq}, sau $t$ vòng lặp mỗi toán tử được dùng đúng $\lfloor t/6 \rfloor$ hoặc $\lceil t/6 \rceil$ lần, và khoảng cách giữa hai lần dùng liên tiếp của cùng một toán tử luôn bằng $6$ vòng. Với chiến lược \texttt{random}, số lần dùng toán tử $o$ sau $t$ vòng là biến ngẫu nhiên $X_o \sim \mathrm{Binomial}(t, 1/6)$, có kỳ vọng $t/6$ và phương sai $5t/36$. Khoảng cách giữa hai lần dùng liên tiếp của toán tử $o$ tuân theo phân phối hình học với tham số $1/6$, nên cũng có kỳ vọng bằng $6$ vòng, nhưng có thể lớn hơn nhiều. Chẳng hạn, xác suất một toán tử không được dùng trong $12$ vòng liên tiếp là $(5/6)^{12} \approx 0{,}112$. Xác suất một toán tử không được dùng trong suốt $H_{\text{div}} = 30$ vòng giữa hai lần đa dạng hóa là $(5/6)^{30} \approx 0{,}004$.
+
+Như vậy, về kỳ vọng hai chiến lược phân bổ số vòng lặp như nhau cho các toán tử. Khác biệt nằm ở độ đều đặn: chiến lược \texttt{seq} đảm bảo trong mỗi cửa sổ sáu vòng liên tiếp, lời giải hiện tại được xét dưới cả sáu kiểu lân cận, còn chiến lược \texttt{random} có thể dùng lặp lại một toán tử nhiều lần trong khi bỏ qua toán tử khác. Khi lời giải nằm ở cực tiểu địa phương của một số toán tử nhưng không phải của các toán tử còn lại, chiến lược \texttt{seq} sẽ tìm ra hướng cải thiện sau tối đa sáu vòng, còn chiến lược \texttt{random} cần trung bình sáu vòng nhưng có thể lâu hơn đáng kể. Ngược lại, tính ngẫu nhiên của \texttt{random} tạo ra nhiều dạng chuỗi move khác nhau hơn qua các lần chạy, có thể giúp đa dạng hóa tìm kiếm. Phân tích này dự đoán hai chiến lược cho chất lượng trung bình gần nhau, với \texttt{seq} có lợi thế nhẹ và ổn định hơn. Dự đoán này được kiểm chứng bằng thực nghiệm ở Mục~\ref{sec:exp_seqrand}.
+
+\bigskip
+Chương này đã chứng minh bài toán MVRPD-TW đa chuyến là NP-khó, phân tích độ phức tạp của từng thành phần trong thuật toán và của toàn bộ thuật toán, đồng thời so sánh về mặt lý thuyết hai chiến lược chọn toán tử tuần tự và ngẫu nhiên. Các phân tích này là cơ sở để thiết kế và lý giải kết quả thực nghiệm ở Chương~5.
+
+\end{document}

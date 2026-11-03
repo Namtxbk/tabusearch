@@ -1,0 +1,58 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+% ============================================================
+\section{Đặt vấn đề}
+\label{sec:dvd}
+% ============================================================
+
+Logistics chặng cuối (last-mile logistics) là khâu tốn kém và kém hiệu quả nhất trong chuỗi cung ứng. Theo khảo sát của Gevaers và cộng sự, chi phí của chặng cuối có thể chiếm từ 13\% đến 75\% tổng chi phí của toàn chuỗi, tùy theo loại hình và khu vực phục vụ~\cite{gevaers2011characteristics}. Sự bùng nổ của thương mại điện tử cùng kỳ vọng ngày càng cao của khách hàng về tốc độ phục vụ khiến các doanh nghiệp vận tải phải tìm kiếm những mô hình vận hành mới, có khả năng rút ngắn thời gian hoàn thành đơn hàng mà không làm tăng mạnh chi phí.
+
+Máy bay không người lái (drone) nổi lên như một phương tiện bổ sung đầy tiềm năng cho bài toán này. So với xe tải, drone bay theo đường thẳng với vận tốc cao hơn, không chịu ảnh hưởng của tắc nghẽn giao thông và có thể tiếp cận những địa điểm khó đến. Tuy vậy, drone bị giới hạn bởi tải trọng nhỏ, thời gian bay hữu hạn do dung lượng pin, và chỉ phù hợp với một phần hàng hóa. Vì thế, mô hình vận tải phối hợp giữa đội xe tải và đội drone, trong đó hai loại phương tiện bổ sung điểm mạnh cho nhau, đã thu hút nhiều sự quan tâm của cả giới nghiên cứu lẫn doanh nghiệp~\cite{chung2020optimization, macrina2020drone}.
+
+Đồ án này nghiên cứu bài toán lập lịch và định tuyến \textit{lấy hàng} cho hệ thống vận tải phối hợp xe tải và drone có cửa sổ thời gian, gọi tắt là bài toán MVRPD-TW đa chuyến (Multi-Vehicle Routing Problem with Drones and Time Windows, Multi-Trip). Trong bài toán, một đội gồm nhiều xe tải và nhiều drone cùng xuất phát từ một kho (depot) để đến lấy hàng tại tập khách hàng rồi mang hàng về kho. Mỗi phương tiện có thể thực hiện nhiều chuyến liên tiếp trong ca làm việc. Mỗi khách hàng có một cửa sổ thời gian phục vụ, và hàng sau khi được lấy không được nằm trên phương tiện quá một ngưỡng thời gian cho trước trước khi về đến kho. Một số khách hàng chỉ có thể được phục vụ bằng xe tải do hàng quá nặng hoặc không phù hợp để vận chuyển bằng drone. Lời giải còn phải tuân thủ giới hạn tải trọng của từng loại phương tiện và giới hạn thời gian bay của drone. Mục tiêu của bài toán là tối thiểu hóa \textit{makespan}, tức thời điểm phương tiện cuối cùng hoàn thành công việc và trở về kho.
+
+Bài toán có ý nghĩa thực tiễn cao vì phản ánh trực tiếp hoạt động gom hàng của các hệ thống bưu chính và chuyển phát hiện nay. Một lịch trình có makespan nhỏ đồng nghĩa với việc toàn bộ hàng được gom về kho sớm hơn, tạo điều kiện cho các khâu phân loại và vận chuyển tiếp theo, đồng thời giảm thời gian vận hành của đội phương tiện.
+
+% ============================================================
+\section{Các giải pháp hiện tại và hạn chế}
+\label{sec:giaiphap}
+% ============================================================
+
+Bài toán định tuyến phương tiện (Vehicle Routing Problem -- VRP) được Dantzig và Ramser đặt nền móng từ năm 1959~\cite{dantzig1959truck} và đã được nghiên cứu rộng rãi trong nhiều thập kỷ~\cite{toth2014vehicle}. Trong số các biến thể, VRP có cửa sổ thời gian (VRPTW) là một trong những biến thể được nghiên cứu nhiều nhất, với bộ dữ liệu chuẩn và các heuristic chèn do Solomon đề xuất~\cite{solomon1987algorithms}. Biến thể đa chuyến, trong đó mỗi phương tiện được phép quay về kho và xuất phát lại nhiều lần, cũng đã được nghiên cứu từ những năm 1990~\cite{taillard1996vehicle} và được tổng kết trong khảo sát của Cattaruzza và cộng sự~\cite{cattaruzza2016multitrip}.
+
+Đối với các mô hình có drone, Murray và Chu đề xuất bài toán Flying Sidekick TSP, trong đó một drone phối hợp với một xe tải và được phóng từ xe~\cite{murray2015flying}. Agatz và cộng sự nghiên cứu bài toán người du lịch với drone (TSP-D) và đề xuất các phương pháp dựa trên quy hoạch nguyên và quy hoạch động~\cite{agatz2018optimization}. Ha và cộng sự xét biến thể tối thiểu chi phí của TSP-D và đề xuất các heuristic GRASP và tìm kiếm cục bộ~\cite{ha2018min}. Wang và cộng sự mở rộng sang trường hợp nhiều xe tải và nhiều drone, đồng thời đưa ra các kết quả phân tích trường hợp xấu nhất về lợi ích của drone~\cite{wang2017vehicle}.
+
+Mặc dù vậy, các nghiên cứu hiện có vẫn còn một số hạn chế khi áp dụng cho bài toán của đồ án. Thứ nhất, phần lớn mô hình chỉ xét một xe tải phối hợp với một hoặc vài drone, trong khi hệ thống thực tế thường có nhiều xe tải và nhiều drone hoạt động đồng thời. Thứ hai, cấu trúc đa chuyến ít khi được xem xét đồng thời với cửa sổ thời gian và ràng buộc thời gian lưu hàng trên phương tiện, mặc dù đây là các yêu cầu phổ biến trong hoạt động gom hàng. Thứ ba, do bài toán thuộc lớp NP-khó, các phương pháp chính xác chỉ giải được các bài toán quy mô nhỏ, còn nhiều heuristic hiện có chưa khai thác đầy đủ cấu trúc đặc thù của bài toán, chẳng hạn thứ tự các chuyến của cùng một phương tiện hoặc việc chuyển cả một chuyến sang phương tiện khác.
+
+% ============================================================
+\section{Mục tiêu và định hướng giải pháp}
+% ============================================================
+
+Mục tiêu của đồ án là xây dựng một thuật toán giải hiệu quả cho bài toán MVRPD-TW đa chuyến, có khả năng tìm được lời giải khả thi chất lượng cao trong thời gian chấp nhận được cho các bài toán có tới 100 khách hàng.
+
+Để đạt mục tiêu trên, đồ án lựa chọn hướng tiếp cận metaheuristic, cụ thể là thuật toán tìm kiếm Tabu (Tabu Search)~\cite{glover1986future, glover1997tabu}, vốn đã chứng minh hiệu quả trên nhiều biến thể của VRP~\cite{gendreau1994tabu, cordeau2001unified}. Giải pháp được xây dựng theo hai giai đoạn. Giai đoạn thứ nhất dùng thuật toán chèn tham lam (Greedy Insertion) để nhanh chóng tạo lời giải ban đầu, trong đó khách hàng được xét theo thứ tự thời hạn phục vụ tăng dần (Earliest Due Date). Giai đoạn thứ hai áp dụng Adaptive Tabu Search với sáu toán tử lân cận (Relocate, Or-opt(2), Swap, 2-opt, Cross-trip và Trip-relocate). Thuật toán cho phép tìm kiếm đi qua cả vùng không khả thi nhờ hàm mục tiêu có phạt với hệ số được điều chỉnh động bằng cơ chế dao động chiến lược (Strategic Oscillation), và dùng cơ chế phá hủy -- tái tạo (Ruin \& Recreate) để thoát khỏi cực tiểu địa phương. Bên cạnh đó, đồ án nghiên cứu các chiến lược sinh lân cận khác nhau, gồm duyệt toàn bộ sáu toán tử, chọn một toán tử ngẫu nhiên, chọn một toán tử theo vòng tuần tự và chọn toán tử theo trọng số thích nghi, nhằm cân bằng giữa chất lượng lời giải và chi phí tính toán.
+
+% ============================================================
+\section{Đóng góp của đồ án}
+% ============================================================
+
+Đồ án có bốn đóng góp chính. Thứ nhất, đồ án hình thức hóa bài toán MVRPD-TW đa chuyến với đầy đủ các ràng buộc về tải trọng, thời gian bay của drone, cửa sổ thời gian, thời gian lưu hàng và loại phương tiện được phép phục vụ, đồng thời xây dựng thuật toán Greedy Insertion theo thứ tự Earliest Due Date để tạo lời giải ban đầu. Thứ hai, đồ án đề xuất thuật toán Adaptive Tabu Search với sáu toán tử lân cận chuyên biệt cho cấu trúc nhiều phương tiện -- nhiều chuyến, hàm mục tiêu chuẩn hóa có bốn thành phần vi phạm với hệ số phạt được điều chỉnh độc lập bằng Strategic Oscillation, và cơ chế Ruin \& Recreate có định hướng. Thứ ba, đồ án cài đặt hoàn chỉnh thuật toán bằng C++ cùng một bộ kiểm tra lời giải độc lập, và hỗ trợ bốn chiến lược sinh lân cận để có thể so sánh trực tiếp với nhau. Thứ tư, đồ án thực nghiệm trên 80 bộ dữ liệu có từ 6 đến 100 khách hàng, so sánh kết quả với lời giải tham chiếu và so sánh có thống kê giữa chiến lược chọn toán tử tuần tự và chọn toán tử ngẫu nhiên qua nhiều lần chạy độc lập.
+
+% ============================================================
+\section{Bố cục đồ án}
+% ============================================================
+
+Phần còn lại của báo cáo được tổ chức như sau.
+
+Chương 2 trình bày các kiến thức nền tảng, bao gồm phát biểu hình thức của bài toán MVRPD-TW đa chuyến với các ràng buộc và hàm mục tiêu, tổng quan các nghiên cứu liên quan, cùng cơ sở lý thuyết về VRP và thuật toán Tabu Search.
+
+Chương 3 trình bày giải pháp đề xuất, gồm thuật toán Greedy Insertion xây dựng lời giải ban đầu, thuật toán Adaptive Tabu Search với hàm mục tiêu có phạt, danh sách Tabu, sáu toán tử lân cận, các chiến lược sinh lân cận, Strategic Oscillation và Ruin \& Recreate.
+
+Chương 4 phân tích lý thuyết về độ khó của bài toán và độ phức tạp tính toán của các thành phần trong thuật toán đề xuất.
+
+Chương 5 trình bày kết quả thực nghiệm, bao gồm mô tả dữ liệu, môi trường và kịch bản thí nghiệm, so sánh với lời giải tham chiếu, và so sánh giữa chiến lược chọn toán tử tuần tự và ngẫu nhiên.
+
+Chương 6 kết luận đồ án, tóm tắt các kết quả đạt được, chỉ ra các hạn chế còn tồn tại và đề xuất hướng phát triển.
+
+\end{document}

@@ -1,0 +1,227 @@
+\documentclass[../DoAn.tex]{subfiles}
+\begin{document}
+
+Chương này đánh giá thuật toán đề xuất bằng thực nghiệm. Mục~\ref{sec:exp_data} mô tả bộ dữ liệu. Mục~\ref{sec:exp_metrics} và Mục~\ref{sec:exp_setup} trình bày các tham số đánh giá, môi trường và kịch bản thí nghiệm. Mục~\ref{sec:exp_ref} so sánh kết quả với lời giải tham chiếu. Mục~\ref{sec:exp_seqrand} so sánh hai chiến lược chọn toán tử tuần tự và ngẫu nhiên qua năm lần chạy độc lập. Mục~\ref{sec:exp_time} phân tích thời gian chạy.
+
+% ============================================================
+\section{Bộ dữ liệu}
+\label{sec:exp_data}
+% ============================================================
+
+Thực nghiệm sử dụng 80 bộ dữ liệu (instance) có số khách hàng $n \in \{6, 10, 12, 20, 50, 100\}$. Tên mỗi instance có dạng $n.R.k$, trong đó $n$ là số khách, $R$ là bán kính (km) của vùng phân bố khách quanh kho, và $k \in \{1, 2, 3, 4\}$ là chỉ số của instance trong nhóm. Ví dụ, instance \texttt{50.30.2} có 50 khách phân bố trong bán kính khoảng 30 km. Số phương tiện tăng theo quy mô bài toán, như tóm tắt trong Bảng~\ref{tab:data}. Mỗi khách có cửa sổ thời gian rộng khoảng 6 phút, và trung bình khoảng 7\% đến 22\% số khách thuộc nhóm $C_1$, chỉ được phục vụ bằng xe tải.
+
+\begin{table}[H]
+\centering
+\caption{Đặc trưng của các nhóm dữ liệu thực nghiệm}
+\label{tab:data}
+\begin{tabular}{rcccccc}
+\toprule
+$n$ & \textbf{Số instance} & $m_T$ & $m_D$ & \textbf{Bán kính $R$ (km)} & \textbf{Tỉ lệ khách $C_1$} & \textbf{Độ rộng TW TB (s)} \\
+\midrule
+6   & 12 & 1 & 1 & 5, 10, 20 & 0,07 & 352,9 \\
+10  & 12 & 1 & 1 & 5, 10, 20 & 0,22 & 354,0 \\
+12  & 12 & 1 & 1 & 5, 10, 20 & 0,16 & 352,7 \\
+20  & 12 & 2 & 2 & 5, 10, 20 & 0,14 & 352,2 \\
+50  & 16 & 3 & 3 & 10, 20, 30, 40 & 0,16 & 358,5 \\
+100 & 16 & 4 & 4 & 10, 20, 30, 40 & 0,12 & 358,5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Các thông số của phương tiện giống nhau ở mọi instance và được liệt kê trong Bảng~\ref{tab:vehicle}. Drone nhanh gấp đôi xe tải nhưng chỉ chở được tối đa 2,27 kg và bay tối đa 700 giây mỗi chuyến, tương ứng với quãng đường khoảng 21,9 km. Vì vậy, với các instance có bán kính lớn, nhiều khách nằm ngoài tầm bay khứ hồi của drone và chỉ có thể được phục vụ bằng xe tải.
+
+\begin{table}[H]
+\centering
+\caption{Thông số phương tiện trong dữ liệu thực nghiệm}
+\label{tab:vehicle}
+\begin{tabular}{llr}
+\toprule
+\textbf{Ký hiệu} & \textbf{Ý nghĩa} & \textbf{Giá trị} \\
+\midrule
+$v^T$ & Vận tốc xe tải & 15,6464 m/s \\
+$v^D$ & Vận tốc drone & 31,2928 m/s \\
+$Q^T$ & Tải trọng xe tải & 400 kg \\
+$Q^D$ & Tải trọng drone & 2,27 kg \\
+$L_D$ & Thời gian bay tối đa của một chuyến drone & 700 s \\
+$L_w$ & Thời gian lưu hàng tối đa trên phương tiện & 3600 s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Bộ dữ liệu được cung cấp kèm một tệp lời giải tham chiếu, ghi makespan tốt nhất đã biết của từng instance. Lời giải tham chiếu được dùng làm mốc so sánh ở Mục~\ref{sec:exp_ref}. Cần lưu ý rằng lời giải tham chiếu được tính với một số thiết lập khác với bài toán của đồ án, chẳng hạn tải trọng xe tải là 1400 kg, nên nó không phải là cận dưới của bài toán. Kết quả so sánh vì vậy cần được hiểu là so sánh với một mốc tham khảo, không phải khoảng cách tới lời giải tối ưu.
+% TODO (sinh viên): bổ sung nguồn gốc của bộ dữ liệu và lời giải tham chiếu (bài báo / nhóm nghiên cứu công bố) và \cite tương ứng.
+
+% ============================================================
+\section{Các tham số đánh giá}
+\label{sec:exp_metrics}
+% ============================================================
+
+Chất lượng lời giải được đánh giá bằng makespan $C_{\max}$ của lời giải khả thi tốt nhất mà thuật toán tìm được. Mọi lời giải được báo cáo đều đã được kiểm tra bởi bộ validator độc lập mô tả ở Mục~\ref{sec:impl}. Trong toàn bộ 800 lần giải (80 instance, hai chiến lược, năm lần chạy), thuật toán đều tìm được lời giải khả thi và tất cả đều được validator xác nhận hợp lệ.
+
+Với mỗi instance và mỗi chiến lược chạy năm lần, ký hiệu $b'$ và $\bar{b}'$ lần lượt là makespan tốt nhất và makespan trung bình qua năm lần của chiến lược tuần tự, còn $b$ và $\bar{b}$ là các giá trị tương ứng của chiến lược ngẫu nhiên. Độ chênh lệch tương đối (gap) giữa hai chiến lược được định nghĩa là
+\begin{equation}
+\mathrm{gap}_{\text{best}} = \frac{b' - b}{b'} \times 100\%, \qquad
+\mathrm{gap}_{\text{avg}} = \frac{\bar{b}' - \bar{b}}{\bar{b}'} \times 100\%.
+\label{eq:gap}
+\end{equation}
+Gap dương nghĩa là chiến lược ngẫu nhiên cho makespan nhỏ hơn, tức tốt hơn chiến lược tuần tự. Gap âm nghĩa là chiến lược ngẫu nhiên kém hơn. Khi so sánh với lời giải tham chiếu có makespan $z^{\text{ref}}$, độ chênh lệch của lời giải $z$ được tính là $(z - z^{\text{ref}})/z^{\text{ref}} \times 100\%$, và giá trị dương nghĩa là lời giải của thuật toán kém hơn tham chiếu.
+
+Về thời gian, đồ án ghi nhận ba đại lượng cho mỗi lần giải: thời gian chạy từ lúc bắt đầu đến khi thuật toán dừng (Time), số vòng lặp đã thực hiện (Iter), và thời điểm tìm ra lời giải khả thi tốt nhất ($T_{\text{best}}$).
+
+% ============================================================
+\section{Môi trường và kịch bản thí nghiệm}
+\label{sec:exp_setup}
+% ============================================================
+
+Chương trình được biên dịch bằng g++ 16.2 (MSYS2) với chuẩn C++17 và tùy chọn tối ưu \texttt{-O2}, chạy trên máy tính dùng bộ xử lý Intel Core i5-13500 (14 nhân), 32 GB RAM, hệ điều hành Windows 11.
+
+Thí nghiệm chính so sánh hai chiến lược sinh lân cận \texttt{seq} và \texttt{random} đã trình bày ở Mục~\ref{subsec:modes}. Hai chiến lược này có cùng chi phí cho mỗi vòng lặp và chỉ khác nhau ở cách chọn toán tử, nên so sánh giữa chúng phản ánh trực tiếp ảnh hưởng của cách chọn toán tử. Mỗi chiến lược được chạy năm lần độc lập trên toàn bộ 80 instance với các hạt giống ngẫu nhiên (seed) $1, 2, 3, 4, 5$. Hai chiến lược dùng chung bộ tham số trong Bảng~\ref{tab:params}, với số move lấy mẫu mỗi vòng $N_s = 1000$. Giới hạn thời gian được đặt là $T_{\text{lim}} = 3000$ giây cho mỗi instance và số vòng lặp tối đa được đặt rất lớn ($N_{\max} = 10^9$), để thuật toán dừng theo điều kiện không cải thiện $H_{\text{stop}} = 5000$ vòng. Trong thực tế, không lần giải nào chạm tới giới hạn thời gian. Để rút ngắn tổng thời gian thí nghiệm, mười lần chạy được thực hiện song song trên mười tiến trình độc lập. Do các tiến trình chia sẻ bộ nhớ đệm và băng thông bộ nhớ của cùng một bộ xử lý, thời gian đo được có thể lớn hơn một chút so với khi chạy riêng lẻ, nhưng điều kiện này như nhau cho cả hai chiến lược.
+
+% ============================================================
+\section{So sánh với lời giải tham chiếu}
+\label{sec:exp_ref}
+% ============================================================
+
+Bảng~\ref{tab:ref} so sánh kết quả của hai chiến lược với lời giải tham chiếu theo từng nhóm kích thước. Cột ``Đạt'' là số instance có makespan chênh lệch với tham chiếu không quá 0,01\%, và cột ``Gap TB'' là chênh lệch trung bình so với tham chiếu của các instance trong nhóm.
+
+\begin{table}[H]
+\centering
+\caption{So sánh makespan với lời giải tham chiếu theo nhóm kích thước}
+\label{tab:ref}
+\begin{tabular}{rr|cc|cc|cc|cc}
+\toprule
+ & & \multicolumn{4}{c|}{\textbf{Tuần tự (seq)}} & \multicolumn{4}{c}{\textbf{Ngẫu nhiên (random)}} \\
+ & & \multicolumn{2}{c|}{Tốt nhất 5 lần} & \multicolumn{2}{c|}{Trung bình 5 lần} & \multicolumn{2}{c|}{Tốt nhất 5 lần} & \multicolumn{2}{c}{Trung bình 5 lần} \\
+$n$ & \textbf{Số inst.} & Đạt & Gap TB (\%) & Đạt & Gap TB (\%) & Đạt & Gap TB (\%) & Đạt & Gap TB (\%) \\
+\midrule
+6   & 12 & 11 & 0,45 & 11 & 0,45 & 11 & 0,45 & 11 & 0,45 \\
+10  & 12 & 12 & 0,00 & 12 & 0,00 & 12 & 0,00 & 12 & 0,00 \\
+12  & 12 & 12 & 0,00 & 12 & 0,00 & 12 & 0,00 & 12 & 0,00 \\
+20  & 12 &  8 & 2,21 &  4 & 3,24 &  8 & 2,21 &  5 & 2,96 \\
+50  & 16 &  5 & 2,51 &  1 & 2,85 &  4 & 2,70 &  2 & 2,91 \\
+100 & 16 &  2 & 4,84 &  0 & 5,51 &  2 & 5,01 &  2 & 6,14 \\
+\midrule
+\textbf{Tổng} & 80 & 50 & 1,87 & 40 & 2,23 & 49 & 1,94 & 44 & 2,32 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Kết quả cho thấy với các bài toán nhỏ có từ 6 đến 12 khách, thuật toán đạt đúng makespan của lời giải tham chiếu ở 35 trên 36 instance, và kết quả hoàn toàn giống nhau ở cả năm lần chạy của cả hai chiến lược. Điều này cho thấy với quy mô nhỏ, thuật toán hội tụ ổn định về cùng một lời giải. Trường hợp duy nhất không đạt là instance \texttt{6.10.3}, với makespan 1295,79 so với 1230,04 của tham chiếu, chênh lệch 5,34\%. Vì mọi lần chạy đều cho cùng kết quả, chênh lệch này nhiều khả năng đến từ khác biệt về thiết lập bài toán giữa hai bên chứ không phải do thuật toán bị kẹt ngẫu nhiên.
+
+Với các bài toán từ 20 khách trở lên, chênh lệch so với tham chiếu tăng dần theo kích thước, từ khoảng 2,2\% với 20 khách lên khoảng 5\% với 100 khách khi lấy lời giải tốt nhất qua năm lần chạy. Chênh lệch lớn tập trung ở một số ít instance. Chẳng hạn, ba instance \texttt{20.10.1}, \texttt{50.20.4} và \texttt{100.20.3} có chênh lệch lần lượt khoảng 15,9\%, 23,4\% và 25\%. Trên toàn bộ dữ liệu, lời giải tốt nhất của chiến lược tuần tự chênh lệch không quá 2\% so với tham chiếu ở 67 trên 80 instance, và con số này với chiến lược ngẫu nhiên là 66 trên 80 instance. Cả bốn instance \texttt{100.10.x} đều chênh lệch trên 2\%. Với bán kính 10 km, hầu hết khách nằm trong tầm bay khứ hồi của drone, nên số cách phân công khách giữa xe tải và drone rất lớn. Đây có thể là nguyên nhân khiến thuật toán khó tìm được cách phân công tốt nhất trong số vòng lặp đã thực hiện. Ở nhóm 50 khách, thuật toán còn tìm được lời giải tốt hơn tham chiếu ở instance \texttt{50.20.3}, với makespan 4700,01 so với 4711,90. Kết quả chi tiết của từng instance được trình bày trong Phụ lục~A.
+
+% ============================================================
+\section{So sánh chiến lược chọn toán tử tuần tự và ngẫu nhiên}
+\label{sec:exp_seqrand}
+% ============================================================
+
+\subsection{Kết quả tổng hợp}
+
+Bảng~\ref{tab:seqrand_total} tổng hợp kết quả của hai chiến lược trên toàn bộ 80 instance. Cột (1) và (3) là tổng 80 giá trị makespan của lần chạy có tổng makespan nhỏ nhất trong năm lần. Cột (2) và (4) là trung bình của tổng 80 giá trị makespan qua năm lần chạy. Cột (5) là tổng của 80 giá trị $\mathrm{gap}_{\text{best}}$ và cột (6) là tổng của 80 giá trị $\mathrm{gap}_{\text{avg}}$ theo công thức~\eqref{eq:gap}. Cột (7) là thời gian trung bình để giải toàn bộ 80 instance trong một lần chạy.
+
+\begin{table}[H]
+\centering
+\caption{Tổng hợp kết quả của hai chiến lược trên 80 instance}
+\label{tab:seqrand_total}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{cccccccc}
+\toprule
+\multicolumn{2}{c}{\textbf{Tuần tự (seq)}} & \multicolumn{2}{c}{\textbf{Ngẫu nhiên (random)}} & \multicolumn{2}{c}{\textbf{Tổng gap (\%)}} & \multicolumn{2}{c}{\textbf{(7) Thời gian 80 instance (s)}} \\
+\cmidrule(lr){1-2}\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
+(1) Lần tốt nhất & (2) Trung bình & (3) Lần tốt nhất & (4) Trung bình & (5) $\sum \mathrm{gap}_{\text{best}}$ & (6) $\sum \mathrm{gap}_{\text{avg}}$ & seq & random \\
+\midrule
+367190,24 & 367397,14 & 367356,82 & 367533,49 & $-5{,}65$ & $-6{,}98$ & 867,97 & 789,56 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+Chiến lược tuần tự cho kết quả tốt hơn ở cả bốn chỉ số chất lượng. Tổng makespan của lần chạy tốt nhất của chiến lược tuần tự là 367190,24, nhỏ hơn 166,58 so với 367356,82 của chiến lược ngẫu nhiên. Tổng makespan trung bình qua năm lần chạy cũng nhỏ hơn 136,35. Tổng gap theo lời giải tốt nhất là $-5{,}65\%$ và theo lời giải trung bình là $-6{,}98\%$, tương ứng với gap trung bình $-0{,}07\%$ và $-0{,}09\%$ cho mỗi instance. Như vậy, chiến lược ngẫu nhiên kém hơn chiến lược tuần tự, nhưng mức chênh lệch rất nhỏ so với makespan. Đổi lại, chiến lược ngẫu nhiên giải xong 80 instance nhanh hơn khoảng 9\%, chủ yếu nhờ dừng sớm hơn ở các bài toán 100 khách như phân tích ở Mục~\ref{sec:exp_time}.
+
+Tổng makespan của từng lần chạy được liệt kê trong Bảng~\ref{tab:runs}. Có thể thấy độ dao động giữa các lần chạy của cả hai chiến lược, vào khoảng vài trăm đơn vị, lớn hơn chênh lệch giữa hai chiến lược. Lần chạy tốt nhất của cả hai chiến lược đều là lần dùng seed~3, và lần chạy tệ nhất của chiến lược tuần tự (367833,86) còn kém hơn lần chạy tệ nhất của chiến lược ngẫu nhiên (367810,16). Điều này cho thấy với năm lần chạy, ưu thế của chiến lược tuần tự chưa đủ lớn để khẳng định có ý nghĩa thống kê.
+
+\begin{table}[H]
+\centering
+\caption{Tổng makespan và tổng thời gian chạy 80 instance của từng lần chạy}
+\label{tab:runs}
+\begin{tabular}{c|cc|cc}
+\toprule
+ & \multicolumn{2}{c|}{\textbf{Tổng makespan}} & \multicolumn{2}{c}{\textbf{Tổng thời gian (s)}} \\
+\textbf{Seed} & seq & random & seq & random \\
+\midrule
+1 & 367833,86 & 367360,68 & 801,89 & 743,18 \\
+2 & 367314,66 & 367677,85 & 902,42 & 802,62 \\
+3 & \textbf{367190,24} & \textbf{367356,82} & 1096,29 & 606,58 \\
+4 & 367261,64 & 367461,94 & 651,99 & 968,50 \\
+5 & 367385,29 & 367810,16 & 887,28 & 826,91 \\
+\midrule
+Trung bình & 367397,14 & 367533,49 & 867,97 & 789,56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Kết quả theo nhóm kích thước}
+
+Bảng~\ref{tab:seqrand_group} phân tích kết quả theo nhóm kích thước. Các cột ``Thắng / Hòa / Thua'' đếm số instance mà chiến lược ngẫu nhiên tốt hơn, bằng và kém hơn chiến lược tuần tự, lần lượt theo lời giải tốt nhất và theo lời giải trung bình.
+
+\begin{table}[H]
+\centering
+\caption{So sánh hai chiến lược theo nhóm kích thước}
+\label{tab:seqrand_group}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{rr|cc|cc|cc|cc}
+\toprule
+ & & \multicolumn{2}{c|}{\textbf{Tổng makespan tốt nhất}} & \multicolumn{2}{c|}{\textbf{Tổng makespan trung bình}} & \multicolumn{2}{c|}{\textbf{Tổng gap (\%)}} & \multicolumn{2}{c}{\textbf{random: Thắng / Hòa / Thua}} \\
+$n$ & \textbf{Số inst.} & seq & random & seq & random & best & avg & best & avg \\
+\midrule
+6   & 12 & 28196,55  & 28196,55  & 28196,55  & 28196,55  & 0,00    & 0,00    & 0 / 12 / 0 & 0 / 12 / 0 \\
+10  & 12 & 36013,11  & 36013,11  & 36013,11  & 36013,11  & 0,00    & 0,00    & 0 / 12 / 0 & 0 / 12 / 0 \\
+12  & 12 & 40439,15  & 40439,15  & 40439,15  & 40439,15  & 0,00    & 0,00    & 0 / 12 / 0 & 0 / 12 / 0 \\
+20  & 12 & 25841,87  & 25841,87  & 25964,53  & 25932,49  & 0,00    & 3,09    & 0 / 12 / 0 & 5 / 5 / 2 \\
+50  & 16 & 115336,23 & 115385,52 & 115472,75 & 115457,30 & $-3{,}04$ & $-0{,}92$ & 0 / 13 / 3 & 4 / 9 / 3 \\
+100 & 16 & 120892,39 & 120924,20 & 121311,04 & 121494,88 & $-2{,}61$ & $-9{,}15$ & 5 / 8 / 3 & 8 / 1 / 7 \\
+\midrule
+\textbf{Tổng} & 80 & 366719,32 & 366800,41 & 367397,14 & 367533,49 & $-5{,}65$ & $-6{,}98$ & 5 / 69 / 6 & 17 / 51 / 12 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+Ở cột tổng makespan tốt nhất của Bảng~\ref{tab:seqrand_group}, giá trị tốt nhất được lấy riêng cho từng instance trong năm lần chạy, nên tổng 366719,32 của chiến lược tuần tự nhỏ hơn tổng của lần chạy tốt nhất trong Bảng~\ref{tab:seqrand_total}.
+
+Có thể rút ra ba nhận xét từ Bảng~\ref{tab:seqrand_group}. Thứ nhất, với 36 instance có từ 6 đến 12 khách, hai chiến lược cho kết quả giống hệt nhau ở mọi lần chạy. Với các bài toán nhỏ, cả hai chiến lược đều thực hiện hơn 5000 vòng lặp, trong khi số lời giải lân cận rất ít, nên cả hai đều tìm được cùng một lời giải tốt nhất bất kể thứ tự dùng toán tử. Thứ hai, với nhóm 20 khách, lời giải tốt nhất của hai chiến lược trùng nhau ở cả 12 instance, nhưng chiến lược ngẫu nhiên có lời giải trung bình tốt hơn ở 5 instance và kém hơn ở 2 instance. Điều này cho thấy ở quy mô trung bình, tính ngẫu nhiên khi chọn toán tử giúp kết quả các lần chạy ổn định hơn. Thứ ba, khác biệt rõ nhất xuất hiện ở các nhóm 50 và 100 khách. Ở nhóm 50 khách, chiến lược tuần tự tìm được lời giải tốt nhất tốt hơn ở 3 instance và không thua ở instance nào. Ở nhóm 100 khách, chiến lược ngẫu nhiên thắng nhiều instance hơn nhưng mức thắng nhỏ, trong khi các instance nó thua có mức chênh lệch lớn, chẳng hạn \texttt{100.10.3} với $\mathrm{gap}_{\text{best}} = -2{,}66\%$ và \texttt{100.10.2} với $-1{,}59\%$. Vì vậy tổng gap vẫn nghiêng về chiến lược tuần tự.
+
+Kết quả thực nghiệm phù hợp với phân tích ở Mục~\ref{sec:seqrand}. Hai chiến lược phân bổ trung bình số vòng lặp như nhau cho các toán tử, nên chất lượng trung bình rất gần nhau. Chiến lược tuần tự đảm bảo lời giải hiện tại được xét dưới cả sáu kiểu lân cận sau mỗi sáu vòng lặp, nhờ đó có lợi thế nhẹ ở các bài toán lớn, nơi không gian tìm kiếm rộng và việc bỏ sót một kiểu lân cận trong nhiều vòng liên tiếp làm chậm quá trình cải thiện. Tuy nhiên, độ dao động giữa các lần chạy lớn hơn chênh lệch giữa hai chiến lược, nên cần nhiều lần chạy hơn để khẳng định khác biệt này.
+
+% ============================================================
+\section{Phân tích thời gian chạy}
+\label{sec:exp_time}
+% ============================================================
+
+Bảng~\ref{tab:time} trình bày thời gian chạy, số vòng lặp và thời điểm tìm ra lời giải tốt nhất, lấy trung bình theo nhóm kích thước qua năm lần chạy.
+
+\begin{table}[H]
+\centering
+\caption{Thời gian chạy trung bình theo nhóm kích thước}
+\label{tab:time}
+\begin{tabular}{r|ccc|ccc}
+\toprule
+ & \multicolumn{3}{c|}{\textbf{Tuần tự (seq)}} & \multicolumn{3}{c}{\textbf{Ngẫu nhiên (random)}} \\
+$n$ & Time (s) & Iter & $T_{\text{best}}$ (s) & Time (s) & Iter & $T_{\text{best}}$ (s) \\
+\midrule
+6   & 0,19  & 5049  & 0,00  & 0,20  & 5040  & 0,00 \\
+10  & 0,45  & 5239  & 0,02  & 0,45  & 5179  & 0,02 \\
+12  & 0,59  & 5347  & 0,04  & 0,59  & 5254  & 0,03 \\
+20  & 1,75  & 6439  & 0,40  & 1,79  & 6432  & 0,42 \\
+50  & 12,29 & 7171  & 4,48  & 12,56 & 7206  & 4,72 \\
+100 & 39,72 & 12620 & 27,07 & 34,51 & 10771 & 20,62 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Thuật toán giải rất nhanh các bài toán nhỏ: với 6 đến 12 khách, thời gian giải dưới một giây và lời giải tốt nhất được tìm thấy gần như ngay lập tức. Phần lớn thời gian chạy là 5000 vòng lặp không cải thiện cần thiết để thỏa điều kiện dừng. Thời gian chạy tăng nhanh theo kích thước, tới khoảng 35 đến 40 giây với 100 khách, phù hợp với phân tích ở Chương~4 rằng chi phí mỗi vòng lặp tăng tuyến tính theo $n$, trong khi số vòng lặp cần thiết cũng tăng theo kích thước bài toán.
+
+Hai chiến lược có thời gian gần như bằng nhau ở các nhóm đến 50 khách, đúng như kỳ vọng vì chi phí mỗi vòng lặp của chúng như nhau. Ở nhóm 100 khách, chiến lược ngẫu nhiên dừng sớm hơn, với trung bình 10771 vòng so với 12620 vòng của chiến lược tuần tự, và tìm ra lời giải tốt nhất sớm hơn, sau 20,62 giây so với 27,07 giây. Điều này có nghĩa là chiến lược tuần tự tiếp tục tìm được cải thiện trong thời gian dài hơn trước khi rơi vào trạng thái không cải thiện. Đây là nguyên nhân chiến lược tuần tự tốn thêm khoảng 9\% thời gian nhưng cho kết quả tốt hơn một chút ở các bài toán lớn.
+
+\bigskip
+Chương này đã đánh giá thuật toán đề xuất trên 80 instance. Thuật toán luôn tìm được lời giải khả thi được kiểm chứng độc lập, đạt đúng lời giải tham chiếu ở hầu hết các bài toán nhỏ, và có chênh lệch trung bình dưới 2\% so với tham chiếu trên toàn bộ dữ liệu khi lấy lời giải tốt nhất qua năm lần chạy. So sánh giữa hai chiến lược chọn toán tử cho thấy chiến lược tuần tự tốt hơn nhẹ về chất lượng, còn chiến lược ngẫu nhiên nhanh hơn khoảng 9\%, và khác biệt chỉ xuất hiện ở các bài toán từ 20 khách trở lên.
+
+\end{document}
