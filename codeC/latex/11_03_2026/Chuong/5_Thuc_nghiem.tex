@@ -1,7 +1,7 @@
 \documentclass[../DoAn.tex]{subfiles}
 \begin{document}
 
-Chương này đánh giá thuật toán đề xuất bằng thực nghiệm. Mục~\ref{sec:exp_data} mô tả bộ dữ liệu. Mục~\ref{sec:exp_metrics} và Mục~\ref{sec:exp_setup} trình bày các tham số đánh giá, môi trường và kịch bản thí nghiệm. Mục~\ref{sec:exp_ref} so sánh kết quả với lời giải tham chiếu. Mục~\ref{sec:exp_seqrand} so sánh hai chiến lược chọn toán tử tuần tự và ngẫu nhiên qua năm lần chạy độc lập. Mục~\ref{sec:exp_time} phân tích thời gian chạy.
+Chương này đánh giá thuật toán đề xuất bằng thực nghiệm. Mục~\ref{sec:exp_data} mô tả bộ dữ liệu. Mục~\ref{sec:exp_metrics} và Mục~\ref{sec:exp_setup} trình bày các tham số đánh giá, môi trường và kịch bản thí nghiệm. Mục~\ref{sec:exp_ref} so sánh kết quả với lời giải tham chiếu. Mục~\ref{sec:exp_seqrand} so sánh hai chiến lược chọn toán tử tuần tự và ngẫu nhiên qua năm lần chạy độc lập. Mục~\ref{sec:exp_time} phân tích thời gian chạy. Mục~\ref{sec:exp_tlim} so sánh hai chiến lược khi thời gian giải mỗi bài bị giới hạn ở mức thấp hơn.
 
 % ============================================================
 \section{Bộ dữ liệu}
@@ -117,20 +117,26 @@ Với các bài toán từ 20 khách trở lên, chênh lệch so với tham chi
 
 \subsection{Kết quả tổng hợp}
 
-Bảng~\ref{tab:seqrand_total} tổng hợp kết quả của hai chiến lược trên toàn bộ 80 instance. Cột (1) và (3) là tổng 80 giá trị makespan của lần chạy có tổng makespan nhỏ nhất trong năm lần. Cột (2) và (4) là trung bình của tổng 80 giá trị makespan qua năm lần chạy. Cột (5) là tổng của 80 giá trị $\mathrm{gap}_{\text{best}}$ và cột (6) là tổng của 80 giá trị $\mathrm{gap}_{\text{avg}}$ theo công thức~\eqref{eq:gap}. Cột (7) là thời gian trung bình để giải toàn bộ 80 instance trong một lần chạy.
+Bảng~\ref{tab:seqrand_total} tổng hợp kết quả của hai chiến lược cho từng nhóm kích thước và trên toàn bộ 80 instance. Trong mỗi nhóm, cột (1) và (3) là tổng makespan của các instance trong nhóm ở lần chạy có tổng này nhỏ nhất trong năm lần. Cột (2) và (4) là trung bình của tổng đó qua năm lần chạy. Cột (5) là tổng các giá trị $\mathrm{gap}_{\text{best}}$ và cột (6) là tổng các giá trị $\mathrm{gap}_{\text{avg}}$ của các instance trong nhóm, theo công thức~\eqref{eq:gap}. Cột (7) là tổng thời gian giải các instance của nhóm trong một lần chạy, lấy trung bình qua năm lần chạy. Do lần chạy tốt nhất được chọn riêng trong từng nhóm, tổng của các cột (1) và (3) theo nhóm có thể nhỏ hơn giá trị ở dòng Tổng.
 
 \begin{table}[H]
 \centering
-\caption{Tổng hợp kết quả của hai chiến lược trên 80 instance}
+\caption{Tổng hợp kết quả của hai chiến lược theo nhóm kích thước (chạy đến khi thỏa điều kiện dừng $H_{\text{stop}}$)}
 \label{tab:seqrand_total}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{cccccccc}
+\begin{tabular}{rr|cc|cc|cc|cc}
 \toprule
-\multicolumn{2}{c}{\textbf{Tuần tự (seq)}} & \multicolumn{2}{c}{\textbf{Ngẫu nhiên (random)}} & \multicolumn{2}{c}{\textbf{Tổng gap (\%)}} & \multicolumn{2}{c}{\textbf{(7) Thời gian 80 instance (s)}} \\
-\cmidrule(lr){1-2}\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}
-(1) Lần tốt nhất & (2) Trung bình & (3) Lần tốt nhất & (4) Trung bình & (5) $\sum \mathrm{gap}_{\text{best}}$ & (6) $\sum \mathrm{gap}_{\text{avg}}$ & seq & random \\
+ & & \multicolumn{2}{c|}{\textbf{Tuần tự (seq)}} & \multicolumn{2}{c|}{\textbf{Ngẫu nhiên (random)}} & \multicolumn{2}{c|}{\textbf{Tổng gap (\%)}} & \multicolumn{2}{c}{\textbf{(7) Thời gian (s)}} \\
+$n$ & \textbf{Số inst.} & (1) Lần tốt nhất & (2) Trung bình & (3) Lần tốt nhất & (4) Trung bình & (5) $\sum \mathrm{gap}_{\text{best}}$ & (6) $\sum \mathrm{gap}_{\text{avg}}$ & seq & random \\
 \midrule
-367190,24 & 367397,14 & 367356,82 & 367533,49 & $-5{,}65$ & $-6{,}98$ & 867,97 & 789,56 \\
+6   & 12 & 28196,55  & 28196,55  & 28196,55  & 28196,55  & 0,00 & 0,00 & 2,33 & 2,40 \\
+10  & 12 & 36013,11  & 36013,11  & 36013,11  & 36013,11  & 0,00 & 0,00 & 5,41 & 5,39 \\
+12  & 12 & 40439,15  & 40439,15  & 40439,15  & 40439,15  & 0,00 & 0,00 & 7,07 & 7,08 \\
+20  & 12 & 25889,15  & 25964,53  & 25870,16  & 25932,49  & 0,00 & 3,09 & 21,01 & 21,50 \\
+50  & 16 & 115386,60 & 115472,75 & 115417,53 & 115457,30 & $-3{,}04$ & $-0{,}92$ & 196,69 & 201,02 \\
+100 & 16 & 121224,14 & 121311,04 & 121306,53 & 121494,88 & $-2{,}61$ & $-9{,}15$ & 635,47 & 552,17 \\
+\midrule
+\textbf{Tổng} & 80 & 367190,24 & 367397,14 & 367356,82 & 367533,49 & $-5{,}65$ & $-6{,}98$ & 867,97 & 789,56 \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -221,7 +227,75 @@ Thuật toán giải rất nhanh các bài toán nhỏ: với 6 đến 12 khách
 
 Hai chiến lược có thời gian gần như bằng nhau ở các nhóm đến 50 khách, đúng như kỳ vọng vì chi phí mỗi vòng lặp của chúng như nhau. Ở nhóm 100 khách, chiến lược ngẫu nhiên dừng sớm hơn, với trung bình 10771 vòng so với 12620 vòng của chiến lược tuần tự, và tìm ra lời giải tốt nhất sớm hơn, sau 20,62 giây so với 27,07 giây. Điều này có nghĩa là chiến lược tuần tự tiếp tục tìm được cải thiện trong thời gian dài hơn trước khi rơi vào trạng thái không cải thiện. Đây là nguyên nhân chiến lược tuần tự tốn thêm khoảng 9\% thời gian nhưng cho kết quả tốt hơn một chút ở các bài toán lớn.
 
+% ============================================================
+\section{So sánh hai chiến lược với ngân sách thời gian giới hạn}
+\label{sec:exp_tlim}
+% ============================================================
+
+Ở các thí nghiệm trên, thuật toán dừng theo điều kiện $H_{\text{stop}}$, nên hai chiến lược có thể dùng lượng thời gian khác nhau. Để so sánh hiệu quả khi thời gian giải bị giới hạn, mỗi chiến lược được chạy lại năm lần (seed $1$ đến $5$) với ngân sách thời gian cố định cho từng instance, thấp hơn thời gian chạy ở Mục~\ref{sec:exp_time}. Vì thời gian chạy đầy đủ tăng xấp xỉ theo $n^2$, ngân sách được đặt là
+\begin{equation}
+T_{\text{lim}} = C \cdot n^2 \ \text{(giây)},
+\label{eq:tlim}
+\end{equation}
+với hai mức $C = 0{,}002$ và $C = 0{,}001$. Với $C = 0{,}002$, ngân sách cho các nhóm $n = 6, 10, 12, 20, 50, 100$ lần lượt là $0{,}072$; $0{,}2$; $0{,}288$; $0{,}8$; $5$ và $20$ giây, tức khoảng 40\% đến 55\% thời gian chạy trung bình ở Bảng~\ref{tab:time}. Với $C = 0{,}001$, ngân sách giảm một nửa, còn khoảng 20\% đến 27\%. Điều kiện dừng $H_{\text{stop}}$ được tắt để cả hai chiến lược dùng đúng cùng một ngân sách thời gian. Các tham số khác giữ nguyên như Bảng~\ref{tab:params}. Mỗi tiến trình được gắn cố định vào một nhân hiệu năng cao riêng của bộ xử lý, và có tối đa sáu tiến trình chạy đồng thời, nên các lần chạy có tốc độ tính toán như nhau.
+
+Khi ngân sách thời gian ngắn, một số lần chạy kết thúc trước khi tìm được lời giải khả thi. Để hai chiến lược được so sánh trên cùng một tập instance, các cột (1) đến (6) của Bảng~\ref{tab:tlim2} và Bảng~\ref{tab:tlim1} chỉ tính trên các instance mà cả mười lần chạy (hai chiến lược, năm seed) đều có lời giải khả thi. Số instance này được ghi ở cột ``Inst. tính''. Hai cột cuối là số lần chạy không tìm được lời giải khả thi của mỗi chiến lược, trên tổng số $5 \times$ (số instance) lần chạy của nhóm. Ý nghĩa các cột (1) đến (6) giống như ở Bảng~\ref{tab:seqrand_total}.
+
+\begin{table}[H]
+\centering
+\caption{So sánh hai chiến lược với ngân sách thời gian $T_{\text{lim}} = 0{,}002\,n^2$ giây}
+\label{tab:tlim2}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{rrrr|cc|cc|cc|cc}
+\toprule
+ & & & & \multicolumn{2}{c|}{\textbf{Tuần tự (seq)}} & \multicolumn{2}{c|}{\textbf{Ngẫu nhiên (random)}} & \multicolumn{2}{c|}{\textbf{Tổng gap (\%)}} & \multicolumn{2}{c}{\textbf{Số lần không khả thi}} \\
+$n$ & \textbf{Số inst.} & $T_{\text{lim}}$ (s) & \textbf{Inst. tính} & (1) Lần tốt nhất & (2) Trung bình & (3) Lần tốt nhất & (4) Trung bình & (5) $\sum \mathrm{gap}_{\text{best}}$ & (6) $\sum \mathrm{gap}_{\text{avg}}$ & seq & random \\
+\midrule
+6   & 12 & 0,072 & 12 & 28196,55 & 28196,55 & 28196,55 & 28196,55 & 0,00 & 0,00 & 0/60 & 0/60 \\
+10  & 12 & 0,2   & 12 & 36013,11 & 36013,11 & 36013,11 & 36013,11 & 0,00 & 0,00 & 0/60 & 0/60 \\
+12  & 12 & 0,288 & 12 & 40439,15 & 40439,15 & 40439,15 & 40439,15 & 0,00 & 0,00 & 0/60 & 0/60 \\
+20  & 12 & 0,8   & 12 & 25925,51 & 26035,52 & 25882,53 & 25987,71 & $-2{,}95$ & 5,10 & 0/60 & 0/60 \\
+50  & 16 & 5     & 13 & 97899,85 & 97965,22 & 97926,69 & 97975,29 & $-1{,}21$ & $-2{,}08$ & 7/80 & 6/80 \\
+100 & 16 & 20    & 7  & 41368,23 & 41432,27 & 41311,29 & 41397,22 & 0,33 & 0,44 & 15/80 & 12/80 \\
+\midrule
+\textbf{Tổng} & 80 & & 68 & 269896,97 & 270081,82 & 269918,74 & 270009,04 & $-3{,}82$ & 3,45 & 22/400 & 18/400 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{So sánh hai chiến lược với ngân sách thời gian $T_{\text{lim}} = 0{,}001\,n^2$ giây}
+\label{tab:tlim1}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{rrrr|cc|cc|cc|cc}
+\toprule
+ & & & & \multicolumn{2}{c|}{\textbf{Tuần tự (seq)}} & \multicolumn{2}{c|}{\textbf{Ngẫu nhiên (random)}} & \multicolumn{2}{c|}{\textbf{Tổng gap (\%)}} & \multicolumn{2}{c}{\textbf{Số lần không khả thi}} \\
+$n$ & \textbf{Số inst.} & $T_{\text{lim}}$ (s) & \textbf{Inst. tính} & (1) Lần tốt nhất & (2) Trung bình & (3) Lần tốt nhất & (4) Trung bình & (5) $\sum \mathrm{gap}_{\text{best}}$ & (6) $\sum \mathrm{gap}_{\text{avg}}$ & seq & random \\
+\midrule
+6   & 12 & 0,036 & 12 & 28196,55 & 28196,55 & 28196,55 & 28196,55 & 0,00 & 0,00 & 0/60 & 0/60 \\
+10  & 12 & 0,1   & 12 & 36013,11 & 36013,47 & 36013,11 & 36013,47 & 0,00 & 0,00 & 0/60 & 0/60 \\
+12  & 12 & 0,144 & 12 & 40439,15 & 40459,40 & 40439,15 & 40439,15 & 0,00 & 1,20 & 0/60 & 0/60 \\
+20  & 12 & 0,4   & 12 & 25959,16 & 26086,62 & 26007,95 & 26030,17 & $-4{,}66$ & 5,80 & 0/60 & 0/60 \\
+50  & 16 & 2,5   & 7  & 42437,37 & 42487,72 & 42362,67 & 42404,22 & 0,18 & 1,64 & 16/80 & 12/80 \\
+100 & 16 & 10    & 7  & 41398,46 & 41480,77 & 41366,78 & 41432,06 & 0,69 & 1,22 & 23/80 & 21/80 \\
+\midrule
+\textbf{Tổng} & 80 & & 62 & 214490,69 & 214724,53 & 214395,22 & 214515,63 & $-3{,}79$ & 9,85 & 39/400 & 33/400 \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+Thời gian giải toàn bộ 80 instance trong một lần chạy giảm từ khoảng 790 đến 870 giây (Bảng~\ref{tab:seqrand_total}) xuống còn 416 giây với $C = 0{,}002$ và 208 giây với $C = 0{,}001$. Từ hai bảng trên có thể rút ra các nhận xét sau.
+
+Thứ nhất, với các nhóm từ 6 đến 12 khách, cả hai chiến lược vẫn đạt đúng lời giải của lần chạy đầy đủ ở gần như mọi lần chạy, kể cả khi ngân sách chỉ còn vài phần trăm giây. Sai khác duy nhất xuất hiện khi $C = 0{,}001$: ở nhóm 10 khách, cả hai chiến lược đều có lần chạy chưa đạt lời giải tốt nhất, và ở nhóm 12 khách, chỉ chiến lược tuần tự có lần chạy như vậy. Điều này khớp với Bảng~\ref{tab:time}: ở các bài nhỏ, lời giải tốt nhất được tìm thấy gần như ngay lập tức, nên phần lớn thời gian của lần chạy đầy đủ chỉ dùng để thỏa điều kiện dừng.
+
+Thứ hai, với nhóm 20 khách, makespan trung bình tăng nhẹ, khoảng 0,4\% đến 0,6\% với $C = 0{,}002$ và 0,9\% đến 1,1\% với $C = 0{,}001$ so với lần chạy đầy đủ. Ở cả hai mức ngân sách, chiến lược ngẫu nhiên có makespan trung bình tốt hơn ($\sum \mathrm{gap}_{\text{avg}}$ bằng 5,10\% và 5,80\%, thắng ở 6 và 7 trên 12 instance), trong khi chiến lược tuần tự có lời giải tốt nhất tốt hơn. Như vậy, khi thời gian ngắn, chiến lược ngẫu nhiên cho kết quả ổn định hơn giữa các lần chạy ở nhóm này.
+
+Thứ ba, với các nhóm 50 và 100 khách, khó khăn chính khi giảm thời gian là tìm được lời giải khả thi. Đúng như phân tích ở Mục~\ref{sec:exp_time}, ở nhiều instance như \texttt{50.10.3}, \texttt{100.20.3} hay \texttt{100.40.1}, riêng thời gian tìm lời giải khả thi đầu tiên trong lần chạy đầy đủ đã lên tới hàng chục giây. Với $C = 0{,}002$, chiến lược tuần tự không tìm được lời giải khả thi ở 22 trên 400 lần chạy của toàn bộ dữ liệu, còn chiến lược ngẫu nhiên là 18 lần. Với $C = 0{,}001$, hai con số này là 39 và 33. Như vậy, ở cả hai mức ngân sách, chiến lược ngẫu nhiên tìm được lời giải khả thi thường xuyên hơn. Trên các instance mà mọi lần chạy đều khả thi, chiến lược ngẫu nhiên cũng cho tổng makespan tốt hơn ở nhóm 100 khách với cả hai mức ngân sách, và ở nhóm 50 khách khi $C = 0{,}001$. Riêng nhóm 50 khách với $C = 0{,}002$, chiến lược tuần tự vẫn tốt hơn, giống như khi chạy đầy đủ. Cần lưu ý rằng các instance được giữ lại trong tổng ở hai nhóm này chủ yếu là các instance dễ tìm lời giải khả thi. Trên các instance đó, makespan trung bình khi giới hạn thời gian gần như bằng khi chạy đầy đủ, chênh lệch không quá khoảng 0,35\%.
+
+Tóm lại, khi chạy đến điều kiện dừng $H_{\text{stop}}$, chiến lược tuần tự tốt hơn nhẹ. Khi thời gian giải bị giới hạn, chiến lược ngẫu nhiên tỏ ra hiệu quả hơn: nó tìm được lời giải khả thi ở nhiều lần chạy hơn với các bài toán lớn, và cho makespan trung bình tốt hơn ở hầu hết các nhóm từ 20 khách trở lên. Với các bài toán đến 20 khách, có thể giảm thời gian giải xuống còn khoảng một phần tư mà makespan trung bình chỉ tăng khoảng 1\% trở xuống. Với các bài toán 50 và 100 khách, ngân sách thời gian cần đủ lớn để thuật toán vượt qua giai đoạn tìm lời giải khả thi.
+
 \bigskip
-Chương này đã đánh giá thuật toán đề xuất trên 80 instance. Thuật toán luôn tìm được lời giải khả thi được kiểm chứng độc lập, đạt đúng lời giải tham chiếu ở hầu hết các bài toán nhỏ, và có chênh lệch trung bình dưới 2\% so với tham chiếu trên toàn bộ dữ liệu khi lấy lời giải tốt nhất qua năm lần chạy. So sánh giữa hai chiến lược chọn toán tử cho thấy chiến lược tuần tự tốt hơn nhẹ về chất lượng, còn chiến lược ngẫu nhiên nhanh hơn khoảng 9\%, và khác biệt chỉ xuất hiện ở các bài toán từ 20 khách trở lên.
+Chương này đã đánh giá thuật toán đề xuất trên 80 instance. Thuật toán luôn tìm được lời giải khả thi được kiểm chứng độc lập, đạt đúng lời giải tham chiếu ở hầu hết các bài toán nhỏ, và có chênh lệch trung bình dưới 2\% so với tham chiếu trên toàn bộ dữ liệu khi lấy lời giải tốt nhất qua năm lần chạy. So sánh giữa hai chiến lược chọn toán tử cho thấy chiến lược tuần tự tốt hơn nhẹ về chất lượng, còn chiến lược ngẫu nhiên nhanh hơn khoảng 9\%, và khác biệt chỉ xuất hiện ở các bài toán từ 20 khách trở lên. Khi giới hạn thời gian giải mỗi bài xuống còn khoảng một nửa và một phần tư, chiến lược ngẫu nhiên lại hiệu quả hơn: nó tìm được lời giải khả thi ở nhiều lần chạy hơn với các bài toán 50 và 100 khách, và cho makespan trung bình tốt hơn ở hầu hết các nhóm từ 20 khách trở lên.
 
 \end{document}

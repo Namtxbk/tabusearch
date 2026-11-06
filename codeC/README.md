@@ -28,6 +28,11 @@ theo đúng pseudocode trong tài liệu `thuat_toan_tabu_search_NAM.pdf`.
 | `main.cpp`                    | Entry point: đọc tham số dòng lệnh, chạy solver, ghi record/report     |
 | `run_all.bat`                 | Build + chạy tất cả `data/` (chế độ all)                              |
 | `run_compare.bat`             | Build + chạy so sánh 3 chế độ all / random / seq                       |
+| `run_seq_random.ps1`          | Thí nghiệm luận văn: seq vs random, 5 seed, chạy đến điều kiện dừng H_stop |
+| `run_time_limit.ps1`          | Thí nghiệm luận văn: seq vs random, 5 seed, ngân sách thời gian T_lim = C·n² |
+| `report/tong_hop_seq_random.py` | Tổng hợp 10 report seq/random thành bảng so sánh tổng (+ CSV)          |
+| `report/tong_hop_theo_nhom.py`  | Tổng hợp 10 report seq/random theo nhóm kích thước n (6, 10, 12, 20, 50, 100) |
+| `report/sinh_phu_luc_A.py`    | Sinh lại Phụ lục A của luận văn từ các report                          |
 | `json.hpp`                    | Thư viện nlohmann/json (single header, MIT license)                    |
 
 ## Build (MSYS2/MinGW hoặc Linux g++)
@@ -46,7 +51,7 @@ g++ -std=c++17 -O2 -Wall -Wextra -o solver main.cpp
 ## Chạy
 
 ```bash
-./solver [path_to_instance.json] [override_max_wait] [--mode=...] [--sample=N] [--seed=N] [--iter=N] [--time=S]
+./solver [path_to_instance.json] [override_max_wait] [--mode=...] [--sample=N] [--seed=N] [--iter=N] [--time=S] [--time-coef=C] [--hstop=N]
 ```
 
 - Không truyền file: chạy **tất cả** file `*.json` trong thư mục `data/`.
@@ -64,6 +69,8 @@ g++ -std=c++17 -O2 -Wall -Wextra -o solver main.cpp
 | `--seed=N` | Seed ngẫu nhiên | `42` |
 | `--iter=N` | Số vòng lặp tối đa | `2000` |
 | `--time=S` | Giới hạn thời gian cho mỗi instance (giây) | không giới hạn |
+| `--time-coef=C` | Giới hạn thời gian theo kích thước: `T_lim = C · n²` giây, n = số khách của instance. Ghi đè `--time` | tắt |
+| `--hstop=N` | Số vòng liên tiếp không cải thiện để dừng (H_stop). `0` = tắt, solver chạy hết `T_lim` | `5000` |
 
 Kết quả:
 - `record/<instance>_<tag>_<ngay-gio>.txt`: chi tiết từng instance (debug log, lời giải, validator).
@@ -83,6 +90,8 @@ Kết quả:
   trong lần chạy: tổng, trung bình, nhỏ nhất, lớn nhất (kèm tên instance). Nó cũng ghi thời gian thực tế
   của cả lần chạy, gồm cả đọc dữ liệu và ghi file. `T_first` và `T_best` chỉ tính trên các instance có lời giải hợp lệ.
 - `<tag>` gồm chế độ, sample và seed, ví dụ `all_seed42` hay `seq_sample100_seed3`.
+  Khi dùng `--time-coef` hoặc `--hstop` khác mặc định, tag có thêm `_tc<C>` / `_hs<N>`,
+  ví dụ `seq_sample1000_tc0.002_hs0_seed1`.
   Nhờ vậy các lần chạy khác seed/sample trong cùng 1 phút không ghi đè file của nhau.
 
 ## Lệnh chạy mẫu (PowerShell, trong thư mục `codeC`)
@@ -182,6 +191,62 @@ foreach ($r in 0.05, 0.1, 0.2, 0.5) {
 
 Lưu ý: tên file record/report chỉ ghi mode, sample và seed, không ghi tham số AOS. Khi thử nhiều bộ tham số
 AOS, hãy xem dòng `Tham so AOS` ở đầu mỗi report để phân biệt các lần chạy.
+
+### 8. Thí nghiệm của luận văn (Chương 5): seq vs random
+
+Nếu PowerShell chặn chạy script, gõ trước: `Set-ExecutionPolicy -Scope Process Bypass`.
+Các lệnh tổng hợp cần Python 3.
+
+**a) Chạy đến điều kiện dừng H_stop** (Bảng 5.4–5.7 và Phụ lục A):
+
+```powershell
+.\run_seq_random.ps1 -TimeLimit 3000           # 10 tiến trình song song: seq/random × seed 1..5
+.\run_seq_random.ps1 -TimeLimit 3000 -Sequential   # chạy lần lượt, thời gian đo chính xác hơn
+```
+
+Script tự build, chạy `--mode=seq|random --sample=1000 --iter=1000000000`, rồi gọi
+`report\tong_hop_seq_random.py` và `report\sinh_phu_luc_A.py`. **Lưu ý:** `sinh_phu_luc_A.py` ghi đè
+`latex\11_03_2026\Chuong\Phu_luc_A.tex` bằng report mới nhất. Mặc định của script là `-TimeLimit 20`;
+số liệu trong luận văn dùng `-TimeLimit 3000` (thực tế không instance nào chạm tới, solver dừng theo H_stop = 5000).
+
+Tách kết quả theo nhóm kích thước n (bảng chi tiết của Bảng 5.4):
+
+```powershell
+python report\tong_hop_theo_nhom.py "" 2026-11-03_10
+```
+
+Tham số thứ 2 là tiền tố ngày-giờ trong tên report, dùng để chọn đúng lần chạy (ở đây là lần chạy 3000 s
+ngày 03/11 lúc 10h). Bỏ trống thì script lấy report mới nhất khớp tag.
+
+**b) Ngân sách thời gian giới hạn `T_lim = C · n²`** (Mục 5.7, Bảng 5.8–5.9):
+
+```powershell
+.\run_time_limit.ps1                         # C = 0.002 và 0.001, seed 1..5 (~25 phút)
+.\run_time_limit.ps1 -Coefs 0.002 -Seeds 1,2,3
+python report\tong_hop_theo_nhom.py _tc0.002_hs0
+python report\tong_hop_theo_nhom.py _tc0.001_hs0
+```
+
+- Mỗi lần chạy dùng `--time-coef=C --hstop=0`: tắt H_stop để seq và random dùng đúng cùng ngân sách thời gian.
+  Với C = 0.002, T_lim = 0.072 / 0.2 / 0.288 / 0.8 / 5 / 20 s cho n = 6 / 10 / 12 / 20 / 50 / 100.
+- Mỗi tiến trình được gắn cố định vào 1 nhân P (logical 0, 2, …, 10 của i5-13500), tối đa 6 tiến trình
+  cùng lúc, để thời gian chạy giữa các lần như nhau. Máy khác thì đổi tham số `-Cores`.
+- Vì kết quả phụ thuộc thời gian, chạy trên máy khác hoặc khi máy đang bận sẽ cho số liệu hơi khác.
+- Tiến độ từng lần chạy xem trong `logs\<mode>_tc<C>_seed<S>.log`.
+
+Kết quả của `tong_hop_theo_nhom.py`: `report\theo_nhom<tag>.md` và `.csv` (tag rỗng → `theo_nhom_day_du`). Ý nghĩa các cột:
+
+| Cột | Ý nghĩa |
+|---|---|
+| `Inst_tinh_tong` | Số instance mà cả 10 lần chạy (2 chế độ × 5 seed) đều có lời giải hợp lệ. Chỉ các instance này được tính vào tổng makespan và gap, để 2 chế độ so trên cùng tập instance |
+| `Seq/Rnd_lan_tot_nhat` | Tổng makespan của nhóm ở lần chạy có tổng nhỏ nhất trong 5 lần |
+| `Seq/Rnd_trung_binh` | Trung bình tổng makespan của nhóm qua 5 lần |
+| `Tong_gap_best/avg(%)` | Tổng gap của các instance trong nhóm, gap = (seq − random) / seq × 100; dương = random tốt hơn |
+| `Seq/Rnd_time(s)` | Tổng thời gian giải các instance của nhóm trong 1 lần chạy, trung bình 5 lần |
+| `Seq/Rnd_lan_khong_hop_le` | Số lần chạy không tìm được lời giải hợp lệ (trên 5 × số instance của nhóm) |
+| `Rnd_T/H/Th_best/avg` | Số instance random Thắng / Hòa / Thua seq, theo lời giải tốt nhất / trung bình |
+
+Cuối file `.md` liệt kê các instance bị loại khỏi tổng và số lần không hợp lệ của từng chế độ.
 
 ## Các chế độ sinh lân cận (`--mode`)
 

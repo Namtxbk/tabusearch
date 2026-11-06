@@ -1,0 +1,24 @@
+[1/2] Build solver.exe ...
+[2/2] C = 0.002 ...
+  - seq seed 1 -> core 0
+  - random seed 1 -> core 2
+  - seq seed 2 -> core 4
+  - random seed 2 -> core 6
+  - seq seed 3 -> core 8
+  - random seed 3 -> core 10
+  - seq seed 4 -> core 0
+  - random seed 4 -> core 2
+  - seq seed 5 -> core 4
+  - random seed 5 -> core 6
+[2/2] C = 0.001 ...
+  - seq seed 1 -> core 0
+  - random seed 1 -> core 2
+  - seq seed 2 -> core 4
+  - random seed 2 -> core 6
+  - seq seed 3 -> core 8
+  - random seed 3 -> core 10
+  - seq seed 4 -> core 0
+  - random seed 4 -> core 2
+  - seq seed 5 -> core 4
+  - random seed 5 -> core 6
+Xong.

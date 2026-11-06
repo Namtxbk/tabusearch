@@ -16,6 +16,8 @@
 //   --iter=N                số vòng lặp tối đa (mặc định 2000)
 //   --time=S                giới hạn thời gian mỗi instance, giây (mặc định không giới hạn)
 //                           -> so sánh công bằng giữa các mode: dùng cùng --time và --iter lớn
+//   --time-coef=C           giới hạn thời gian theo kích thước: T_lim = C * n^2 giây (n = số khách), ghi đè --time
+//   --hstop=N               số vòng không cải thiện để dừng H_stop (mặc định 5000, 0 = tắt -> chạy hết T_lim)
 //   vd: solver.exe --mode=random --sample=100
 // Mỗi instance ghi chi tiết (kèm debug log) vào record/<ten>_<YYYY-MM-DD_HH-MM>.txt,
 // tổng hợp lời giải của tất cả instance ghi vào 1 file duy nhất report/report_<YYYY-MM-DD_HH-MM>.txt.
@@ -29,6 +31,7 @@
 #include <ctime>
 #include <chrono>
 #include <filesystem>
+#include <limits>
 #include "instance.hpp"
 #include "tabu_search.hpp"
 #include "validator.hpp"
@@ -46,6 +49,9 @@ struct RunConfig {
     unsigned int seed = 42;
     long long maxIterations = 2000;
     double timeLimitSeconds = 200000.0;
+    double timeCoef = -1.0;          // > 0: T_lim = timeCoef * n^2
+    std::string timeCoefStr;         // giữ nguyên chuỗi để đặt tên file
+    long long hStop = 5000;          // 0 = tắt H_stop
 };
 
 static const char* vehicleTypeName(VehicleType t) {
@@ -159,7 +165,12 @@ static RunSummary runInstance(const std::string& path, const RunConfig& cfg, std
         TabuSearchParams params;
         params.maxIterations = cfg.maxIterations;
         params.timeLimitSeconds = cfg.timeLimitSeconds;
-        params.stoppingStagnation = 5000;
+        if (cfg.timeCoef > 0.0) {
+            const double n = static_cast<double>(inst.numCustomers());
+            params.timeLimitSeconds = cfg.timeCoef * n * n;
+            os << "[debug] time limit = " << cfg.timeCoef << " * n^2 = " << params.timeLimitSeconds << "s\n";
+        }
+        params.stoppingStagnation = (cfg.hStop > 0) ? cfg.hStop : std::numeric_limits<long long>::max();
         // 360 quá cao so với tổng số iteration khả dụng trong ngân sách thời gian (n lớn chỉ chạy
         // được ~100-400 iteration/20s) -> ruin-recreate gần như không bao giờ được kích hoạt.
         // Hạ xuống để search có cơ hội thoát local optimum trong cùng ngân sách thời gian.
@@ -272,7 +283,9 @@ static void writeReport(const std::string& reportPath, const std::vector<RunSumm
     os << "BAO CAO TONG HOP KET QUA ADAPTIVE TABU SEARCH (MVRPD-TW)\n";
     os << "Che do sinh lan can: " << neighborhoodModeName(cfg.neighborhood.mode)
        << " | sample=" << cfg.neighborhood.sampleSize << " | seed=" << cfg.seed
-       << " | iter=" << cfg.maxIterations << " | time=" << cfg.timeLimitSeconds << "s\n";
+       << " | iter=" << cfg.maxIterations << " | time=" << cfg.timeLimitSeconds << "s";
+    if (cfg.timeCoef > 0.0) os << " | time-coef=" << cfg.timeCoef << " (T_lim = C*n^2)";
+    os << " | hstop=" << cfg.hStop << "\n";
     if (cfg.neighborhood.mode == NeighborhoodMode::ADAPTIVE) {
         const auto& a = cfg.neighborhood.aos;
         os << "Tham so AOS: seg=" << a.segmentLength << " | r=" << a.reaction
@@ -426,6 +439,11 @@ int main(int argc, char** argv) {
             cfg.maxIterations = std::stoll(a.substr(7));
         } else if (a.rfind("--time=", 0) == 0) {
             cfg.timeLimitSeconds = std::stod(a.substr(7));
+        } else if (a.rfind("--time-coef=", 0) == 0) {
+            cfg.timeCoefStr = a.substr(12);
+            cfg.timeCoef = std::stod(cfg.timeCoefStr);
+        } else if (a.rfind("--hstop=", 0) == 0) {
+            cfg.hStop = std::stoll(a.substr(8));
         } else {
             positional.push_back(a);
         }
@@ -435,6 +453,8 @@ int main(int argc, char** argv) {
     std::string modeTag = neighborhoodModeName(cfg.neighborhood.mode);
     if (cfg.neighborhood.mode != NeighborhoodMode::ALL)
         modeTag += "_sample" + std::to_string(cfg.neighborhood.sampleSize);
+    if (cfg.timeCoef > 0.0) modeTag += "_tc" + cfg.timeCoefStr;
+    if (cfg.hStop != 5000) modeTag += "_hs" + std::to_string(cfg.hStop);
     modeTag += "_seed" + std::to_string(cfg.seed);
 
     std::vector<std::string> files;

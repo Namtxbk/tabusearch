@@ -1,0 +1,89 @@
+[1/80] data\6.5.1.json ... hop le tot nhat=699.6657 (T_best=0.00s) | tot nhat tim duoc=699.6657 (VP=0.0000) (0.04s) -> record\6.5.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[2/80] data\6.5.2.json ... hop le tot nhat=550.7225 (T_best=0.00s) | tot nhat tim duoc=550.7225 (VP=0.0000) (0.04s) -> record\6.5.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[3/80] data\6.5.3.json ... hop le tot nhat=766.7834 (T_best=0.00s) | tot nhat tim duoc=691.4583 (VP=0.1312) (0.04s) -> record\6.5.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[4/80] data\6.5.4.json ... hop le tot nhat=579.9713 (T_best=0.00s) | tot nhat tim duoc=579.9713 (VP=0.0000) (0.04s) -> record\6.5.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[5/80] data\6.10.1.json ... hop le tot nhat=1078.7477 (T_best=0.00s) | tot nhat tim duoc=1058.9239 (VP=0.0697) (0.04s) -> record\6.10.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[6/80] data\6.10.2.json ... hop le tot nhat=1232.5642 (T_best=0.00s) | tot nhat tim duoc=1077.5531 (VP=0.1538) (0.04s) -> record\6.10.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[7/80] data\6.10.3.json ... hop le tot nhat=1295.7860 (T_best=0.00s) | tot nhat tim duoc=1135.7564 (VP=0.0594) (0.04s) -> record\6.10.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[8/80] data\6.10.4.json ... hop le tot nhat=997.8432 (T_best=0.00s) | tot nhat tim duoc=997.8432 (VP=0.0000) (0.04s) -> record\6.10.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[9/80] data\6.20.1.json ... hop le tot nhat=4486.6813 (T_best=0.00s) | tot nhat tim duoc=4486.6813 (VP=0.0000) (0.04s) -> record\6.20.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[10/80] data\6.20.2.json ... hop le tot nhat=4099.7879 (T_best=0.00s) | tot nhat tim duoc=4099.7879 (VP=0.0000) (0.04s) -> record\6.20.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[11/80] data\6.20.3.json ... hop le tot nhat=6233.2145 (T_best=0.00s) | tot nhat tim duoc=6053.2145 (VP=0.0869) (0.04s) -> record\6.20.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[12/80] data\6.20.4.json ... hop le tot nhat=6174.7861 (T_best=0.00s) | tot nhat tim duoc=5994.7861 (VP=0.0571) (0.04s) -> record\6.20.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[13/80] data\10.5.1.json ... hop le tot nhat=1212.9465 (T_best=0.00s) | tot nhat tim duoc=1212.9465 (VP=0.0000) (0.10s) -> record\10.5.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[14/80] data\10.5.2.json ... hop le tot nhat=709.2037 (T_best=0.03s) | tot nhat tim duoc=670.0932 (VP=0.0505) (0.10s) -> record\10.5.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[15/80] data\10.5.3.json ... hop le tot nhat=775.6905 (T_best=0.01s) | tot nhat tim duoc=706.8110 (VP=0.1436) (0.10s) -> record\10.5.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[16/80] data\10.5.4.json ... hop le tot nhat=745.4252 (T_best=0.01s) | tot nhat tim duoc=670.2427 (VP=0.0331) (0.10s) -> record\10.5.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[17/80] data\10.10.1.json ... hop le tot nhat=1735.9500 (T_best=0.00s) | tot nhat tim duoc=1568.7678 (VP=0.2276) (0.10s) -> record\10.10.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[18/80] data\10.10.2.json ... hop le tot nhat=2006.7277 (T_best=0.00s) | tot nhat tim duoc=2006.7277 (VP=0.0000) (0.10s) -> record\10.10.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[19/80] data\10.10.3.json ... hop le tot nhat=1818.1503 (T_best=0.02s) | tot nhat tim duoc=1818.1503 (VP=0.0000) (0.10s) -> record\10.10.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[20/80] data\10.10.4.json ... hop le tot nhat=1359.6333 (T_best=0.00s) | tot nhat tim duoc=1359.6333 (VP=0.0000) (0.10s) -> record\10.10.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[21/80] data\10.20.1.json ... hop le tot nhat=5738.0668 (T_best=0.00s) | tot nhat tim duoc=5558.0668 (VP=0.0220) (0.10s) -> record\10.20.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[22/80] data\10.20.2.json ... hop le tot nhat=6973.4074 (T_best=0.00s) | tot nhat tim duoc=6876.8413 (VP=0.1502) (0.10s) -> record\10.20.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[23/80] data\10.20.3.json ... hop le tot nhat=6468.8684 (T_best=0.00s) | tot nhat tim duoc=6437.5841 (VP=0.1084) (0.10s) -> record\10.20.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[24/80] data\10.20.4.json ... hop le tot nhat=6469.0426 (T_best=0.01s) | tot nhat tim duoc=6459.9340 (VP=0.1636) (0.10s) -> record\10.20.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[25/80] data\12.5.1.json ... hop le tot nhat=722.7394 (T_best=0.02s) | tot nhat tim duoc=722.7394 (VP=0.0000) (0.14s) -> record\12.5.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[26/80] data\12.5.2.json ... hop le tot nhat=682.5606 (T_best=0.01s) | tot nhat tim duoc=671.5508 (VP=0.0847) (0.14s) -> record\12.5.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[27/80] data\12.5.3.json ... hop le tot nhat=1011.0698 (T_best=0.03s) | tot nhat tim duoc=997.5556 (VP=0.1364) (0.14s) -> record\12.5.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[28/80] data\12.5.4.json ... hop le tot nhat=925.8220 (T_best=0.05s) | tot nhat tim duoc=769.9041 (VP=0.1143) (0.14s) -> record\12.5.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[29/80] data\12.10.1.json ... hop le tot nhat=1669.8570 (T_best=0.01s) | tot nhat tim duoc=1590.2263 (VP=0.1417) (0.14s) -> record\12.10.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[30/80] data\12.10.2.json ... hop le tot nhat=1670.9122 (T_best=0.00s) | tot nhat tim duoc=1608.6161 (VP=0.1892) (0.14s) -> record\12.10.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[31/80] data\12.10.3.json ... hop le tot nhat=1788.4913 (T_best=0.01s) | tot nhat tim duoc=1783.4266 (VP=0.0380) (0.14s) -> record\12.10.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[32/80] data\12.10.4.json ... hop le tot nhat=1719.9583 (T_best=0.03s) | tot nhat tim duoc=1665.7475 (VP=0.2054) (0.14s) -> record\12.10.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[33/80] data\12.20.1.json ... hop le tot nhat=8240.6221 (T_best=0.01s) | tot nhat tim duoc=8210.5584 (VP=0.2550) (0.14s) -> record\12.20.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[34/80] data\12.20.2.json ... hop le tot nhat=8615.0909 (T_best=0.00s) | tot nhat tim duoc=8615.0739 (VP=0.2261) (0.14s) -> record\12.20.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[35/80] data\12.20.3.json ... hop le tot nhat=5974.0297 (T_best=0.05s) | tot nhat tim duoc=5936.8618 (VP=0.1343) (0.14s) -> record\12.20.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[36/80] data\12.20.4.json ... hop le tot nhat=7417.9968 (T_best=0.02s) | tot nhat tim duoc=7400.5139 (VP=0.2306) (0.14s) -> record\12.20.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[37/80] data\20.5.1.json ... hop le tot nhat=651.8217 (T_best=0.10s) | tot nhat tim duoc=625.9857 (VP=0.0435) (0.40s) -> record\20.5.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[38/80] data\20.5.2.json ... hop le tot nhat=712.1070 (T_best=0.29s) | tot nhat tim duoc=712.1070 (VP=0.0000) (0.40s) -> record\20.5.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[39/80] data\20.5.3.json ... hop le tot nhat=499.8123 (T_best=0.02s) | tot nhat tim duoc=450.0301 (VP=0.0362) (0.40s) -> record\20.5.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[40/80] data\20.5.4.json ... hop le tot nhat=543.8191 (T_best=0.30s) | tot nhat tim duoc=496.7938 (VP=0.0511) (0.40s) -> record\20.5.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[41/80] data\20.10.1.json ... hop le tot nhat=1462.0205 (T_best=0.32s) | tot nhat tim duoc=1380.0628 (VP=0.1693) (0.40s) -> record\20.10.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[42/80] data\20.10.2.json ... hop le tot nhat=1300.7980 (T_best=0.39s) | tot nhat tim duoc=1254.2393 (VP=0.1825) (0.40s) -> record\20.10.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[43/80] data\20.10.3.json ... hop le tot nhat=1206.1755 (T_best=0.17s) | tot nhat tim duoc=1206.1755 (VP=0.0000) (0.40s) -> record\20.10.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[44/80] data\20.10.4.json ... hop le tot nhat=1336.8029 (T_best=0.17s) | tot nhat tim duoc=1229.5519 (VP=0.1342) (0.40s) -> record\20.10.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[45/80] data\20.20.1.json ... hop le tot nhat=4375.9962 (T_best=0.00s) | tot nhat tim duoc=4375.9962 (VP=0.0000) (0.40s) -> record\20.20.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[46/80] data\20.20.2.json ... hop le tot nhat=4041.3119 (T_best=0.00s) | tot nhat tim duoc=4041.3119 (VP=0.0000) (0.40s) -> record\20.20.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[47/80] data\20.20.3.json ... hop le tot nhat=5505.9836 (T_best=0.01s) | tot nhat tim duoc=5478.0535 (VP=0.0625) (0.40s) -> record\20.20.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[48/80] data\20.20.4.json ... hop le tot nhat=4371.3015 (T_best=0.01s) | tot nhat tim duoc=4371.3015 (VP=0.0000) (0.40s) -> record\20.20.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[49/80] data\50.10.1.json ... hop le tot nhat=1915.4618 (T_best=2.29s) | tot nhat tim duoc=1905.2065 (VP=0.1447) (2.50s) -> record\50.10.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[50/80] data\50.10.2.json ... hop le tot nhat=1632.5389 (T_best=1.82s) | tot nhat tim duoc=1619.8440 (VP=0.0709) (2.50s) -> record\50.10.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[51/80] data\50.10.3.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=1715.2256 (VP=0.0094) (2.50s) -> record\50.10.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[52/80] data\50.10.4.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=1628.5125 (VP=0.0034) (2.50s) -> record\50.10.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[53/80] data\50.20.1.json ... hop le tot nhat=4244.8967 (T_best=1.03s) | tot nhat tim duoc=4244.8967 (VP=0.0000) (2.50s) -> record\50.20.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[54/80] data\50.20.2.json ... hop le tot nhat=4283.0492 (T_best=0.12s) | tot nhat tim duoc=4283.0492 (VP=0.0000) (2.50s) -> record\50.20.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[55/80] data\50.20.3.json ... hop le tot nhat=4700.0082 (T_best=0.40s) | tot nhat tim duoc=4599.4407 (VP=0.0043) (2.50s) -> record\50.20.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[56/80] data\50.20.4.json ... hop le tot nhat=5593.2086 (T_best=0.64s) | tot nhat tim duoc=5413.2086 (VP=0.0020) (2.50s) -> record\50.20.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[57/80] data\50.30.1.json ... hop le tot nhat=8873.7838 (T_best=1.61s) | tot nhat tim duoc=8873.7838 (VP=0.0000) (2.50s) -> record\50.30.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[58/80] data\50.30.2.json ... hop le tot nhat=8037.2016 (T_best=0.13s) | tot nhat tim duoc=8037.2016 (VP=0.0000) (2.50s) -> record\50.30.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[59/80] data\50.30.3.json ... hop le tot nhat=8908.1030 (T_best=2.03s) | tot nhat tim duoc=8908.1030 (VP=0.0000) (2.50s) -> record\50.30.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-55.txt
+[60/80] data\50.30.4.json ... hop le tot nhat=8839.8711 (T_best=1.04s) | tot nhat tim duoc=8839.8711 (VP=0.0000) (2.50s) -> record\50.30.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[61/80] data\50.40.1.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=14729.9850 (VP=0.0025) (2.50s) -> record\50.40.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[62/80] data\50.40.2.json ... hop le tot nhat=14484.9392 (T_best=0.99s) | tot nhat tim duoc=14484.9392 (VP=0.0000) (2.50s) -> record\50.40.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[63/80] data\50.40.3.json ... hop le tot nhat=13180.0613 (T_best=0.92s) | tot nhat tim duoc=13128.6417 (VP=0.0040) (2.50s) -> record\50.40.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[64/80] data\50.40.4.json ... hop le tot nhat=13241.6024 (T_best=0.66s) | tot nhat tim duoc=13061.6024 (VP=0.1138) (2.50s) -> record\50.40.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[65/80] data\100.10.1.json ... hop le tot nhat=2049.2293 (T_best=8.49s) | tot nhat tim duoc=1794.0842 (VP=0.0044) (10.00s) -> record\100.10.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[66/80] data\100.10.2.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=1906.7645 (VP=0.0025) (10.00s) -> record\100.10.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[67/80] data\100.10.3.json ... hop le tot nhat=1768.4449 (T_best=8.14s) | tot nhat tim duoc=1714.9555 (VP=0.0002) (10.00s) -> record\100.10.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[68/80] data\100.10.4.json ... hop le tot nhat=1659.0212 (T_best=1.64s) | tot nhat tim duoc=1659.0212 (VP=0.0000) (10.00s) -> record\100.10.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-56.txt
+[69/80] data\100.20.1.json ... hop le tot nhat=4302.3068 (T_best=2.23s) | tot nhat tim duoc=4302.3068 (VP=0.0000) (10.00s) -> record\100.20.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-57.txt
+[70/80] data\100.20.2.json ... hop le tot nhat=4055.9937 (T_best=1.06s) | tot nhat tim duoc=4055.9937 (VP=0.0000) (10.00s) -> record\100.20.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-57.txt
+[71/80] data\100.20.3.json ... hop le tot nhat=5279.6034 (T_best=6.07s) | tot nhat tim duoc=5255.7313 (VP=0.0010) (10.00s) -> record\100.20.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-57.txt
+[72/80] data\100.20.4.json ... hop le tot nhat=4573.8691 (T_best=1.96s) | tot nhat tim duoc=4460.3491 (VP=0.0013) (10.00s) -> record\100.20.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-57.txt
+[73/80] data\100.30.1.json ... hop le tot nhat=9021.7330 (T_best=3.90s) | tot nhat tim duoc=8989.4051 (VP=0.0023) (10.00s) -> record\100.30.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-57.txt
+[74/80] data\100.30.2.json ... hop le tot nhat=8744.2639 (T_best=8.94s) | tot nhat tim duoc=8744.2639 (VP=0.0000) (10.00s) -> record\100.30.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-57.txt
+[75/80] data\100.30.3.json ... hop le tot nhat=9180.8049 (T_best=0.46s) | tot nhat tim duoc=9148.9222 (VP=0.0002) (10.00s) -> record\100.30.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt
+[76/80] data\100.30.4.json ... hop le tot nhat=9211.0422 (T_best=2.38s) | tot nhat tim duoc=9211.0422 (VP=0.0000) (10.00s) -> record\100.30.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt
+[77/80] data\100.40.1.json ... hop le tot nhat=14849.3083 (T_best=2.70s) | tot nhat tim duoc=14849.3083 (VP=0.0000) (10.00s) -> record\100.40.1_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt
+[78/80] data\100.40.2.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=15507.9560 (VP=0.0010) (10.00s) -> record\100.40.2_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt
+[79/80] data\100.40.3.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=15437.2980 (VP=0.0010) (10.00s) -> record\100.40.3_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt
+[80/80] data\100.40.4.json ... No feasible solution found (report per pseudocode).
+hop le tot nhat=- | tot nhat tim duoc=14852.1926 (VP=0.0018) (10.01s) -> record\100.40.4_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt
+
+Da ghi bao cao tong hop: report\report_random_sample1000_tc0.001_hs0_seed2_2026-11-06_10-58.txt (hoan thanh luc 06/11/2026 10:58)

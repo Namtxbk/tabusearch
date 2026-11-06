@@ -53,6 +53,6 @@ Kết quả ở Mục~\ref{sec:exp_seqrand} được tạo bằng cách chạy m
 \texttt{solver.exe --mode=seq --sample=1000 --seed=S --time=3000 --iter=1000000000}\\
 \texttt{solver.exe --mode=random --sample=1000 --seed=S --time=3000 --iter=1000000000}
 \end{quote}
-với $S = 1, 2, 3, 4, 5$. Sau đó, tập lệnh \texttt{report/tong\_hop\_seq\_random.py} đọc mười tệp báo cáo và tạo các bảng tổng hợp ở Bảng~\ref{tab:seqrand_total}, còn tập lệnh \texttt{report/sinh\_phu\_luc\_A.py} tạo các bảng chi tiết ở Phụ lục~A. Do thuật toán dùng bộ sinh số ngẫu nhiên với seed cố định, cùng một seed sẽ cho cùng dãy lời giải, nhưng vì điều kiện dừng có xét thời gian, kết quả có thể khác nhau rất ít giữa các máy có tốc độ khác nhau.
+với $S = 1, 2, 3, 4, 5$. Sau đó, tập lệnh \texttt{report/tong\_hop\_seq\_random.py} đọc mười tệp báo cáo và tạo các bảng tổng hợp ở Bảng~\ref{tab:seqrand_total}, còn tập lệnh \texttt{report/sinh\_phu\_luc\_A.py} tạo các bảng chi tiết ở Phụ lục~A. Thí nghiệm với ngân sách thời gian giới hạn ở Mục~\ref{sec:exp_tlim} được chạy bằng tập lệnh \texttt{run\_time\_limit.ps1}, dùng hai tùy chọn \texttt{--time-coef=C} (đặt $T_{\text{lim}} = C \cdot n^2$ giây) và \texttt{--hstop=0} (tắt điều kiện dừng $H_{\text{stop}}$), và tập lệnh \texttt{report/tong\_hop\_theo\_nhom.py} tạo các bảng tổng hợp theo nhóm kích thước. Do thuật toán dùng bộ sinh số ngẫu nhiên với seed cố định, cùng một seed sẽ cho cùng dãy lời giải, nhưng vì điều kiện dừng có xét thời gian, kết quả có thể khác nhau rất ít giữa các máy có tốc độ khác nhau.
 
 \end{document}

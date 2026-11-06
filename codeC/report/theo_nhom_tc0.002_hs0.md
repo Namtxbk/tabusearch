@@ -1,0 +1,25 @@
+# Seq vs random theo nhom n (tag='_tc0.002_hs0', date='', sample=1000, seeds=1,2,3,4,5)
+
+| n | So_inst | Inst_tinh_tong | Seq_lan_tot_nhat | Seq_trung_binh | Rnd_lan_tot_nhat | Rnd_trung_binh | Tong_gap_best(%) | Tong_gap_avg(%) | Seq_time(s) | Rnd_time(s) | Seq_iter_TB | Rnd_iter_TB | Seq_lan_khong_hop_le | Rnd_lan_khong_hop_le | Rnd_T/H/Th_best | Rnd_T/H/Th_avg |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 6 | 12 | 12 | 28196.55 | 28196.55 | 28196.55 | 28196.55 | 0.00 | 0.00 | 0.84 | 0.84 | 2336 | 2291 | 0 | 0 | 0/12/0 | 0/12/0 |
+| 10 | 12 | 12 | 36013.11 | 36013.11 | 36013.11 | 36013.11 | 0.00 | 0.00 | 2.40 | 2.40 | 3132 | 3052 | 0 | 0 | 0/12/0 | 0/12/0 |
+| 12 | 12 | 12 | 40439.15 | 40439.15 | 40439.15 | 40439.15 | 0.00 | 0.00 | 3.48 | 3.48 | 3328 | 3302 | 0 | 0 | 0/12/0 | 0/12/0 |
+| 20 | 12 | 12 | 25925.51 | 26035.52 | 25882.53 | 25987.71 | -2.95 | 5.10 | 9.60 | 9.60 | 4382 | 4428 | 0 | 0 | 0/11/1 | 6/5/1 |
+| 50 | 16 | 13 | 97899.85 | 97965.22 | 97926.69 | 97975.29 | -1.21 | -2.08 | 80.00 | 80.00 | 4644 | 4652 | 7 | 6 | 0/11/2 | 3/7/3 |
+| 100 | 16 | 7 | 41368.23 | 41432.27 | 41311.29 | 41397.22 | 0.33 | 0.44 | 320.00 | 320.00 | 9534 | 9674 | 15 | 12 | 2/5/0 | 4/1/2 |
+| Tong | 80 | 68 | 269896.97 | 270081.82 | 269918.74 | 270009.04 | -3.82 | 3.45 | 416.33 | 416.32 | 4812 | 4826 | 22 | 18 | 2/63/3 | 13/49/6 |
+
+Instance bi loai khoi tong (co lan chay khong hop le):
+- 50.10.3: seq 4/5, random 4/5 lan khong hop le
+- 50.10.4: seq 2/5, random 2/5 lan khong hop le
+- 50.40.1: seq 1/5, random 0/5 lan khong hop le
+- 100.10.1: seq 0/5, random 1/5 lan khong hop le
+- 100.10.2: seq 3/5, random 0/5 lan khong hop le
+- 100.10.3: seq 2/5, random 0/5 lan khong hop le
+- 100.20.3: seq 2/5, random 0/5 lan khong hop le
+- 100.30.4: seq 2/5, random 2/5 lan khong hop le
+- 100.40.1: seq 3/5, random 3/5 lan khong hop le
+- 100.40.2: seq 2/5, random 1/5 lan khong hop le
+- 100.40.3: seq 0/5, random 1/5 lan khong hop le
+- 100.40.4: seq 1/5, random 4/5 lan khong hop le
